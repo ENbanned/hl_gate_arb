@@ -6,6 +6,7 @@ from src.exchanges.gate import GateExchange
 from src.exchanges.hyperliquid import HyperliquidExchange
 from src.strategy.arbitrage import ArbitrageStrategy
 from src.utils.logging import get_logger, setup_logging
+from src.utils.emergency_shutdown import emergency_close_all
 
 
 setup_logging(log_level="INFO", console_output=True)
@@ -45,12 +46,19 @@ class Application:
   
   
   async def run(self):
-    try:
-      await self.strategy.start()
-    except asyncio.CancelledError:
-      log.debug("application_cancelled")
-    except Exception as e:
-      log.error("application_error", error=str(e), exc_info=True)
+      try:
+        await self.strategy.start()
+      except asyncio.CancelledError:
+        log.debug("application_cancelled")
+      except Exception as e:
+        log.error("application_error", error=str(e), exc_info=True)
+        
+        log.critical("application_critical_error_emergency_shutdown")
+        
+        try:
+          await emergency_close_all(self.gate, self.hyperliquid)
+        except Exception as shutdown_error:
+          log.critical("emergency_shutdown_failed", error=str(shutdown_error), exc_info=True)
   
   
   async def shutdown(self):
@@ -86,6 +94,14 @@ async def main():
     await app.run()
   except KeyboardInterrupt:
     log.info("keyboard_interrupt")
+  except Exception as e:
+    log.critical("main_unhandled_exception", error=str(e), exc_info=True)
+    
+    try:
+      log.critical("main_initiating_emergency_shutdown")
+      await emergency_close_all(app.gate, app.hyperliquid)
+    except Exception as shutdown_error:
+      log.critical("main_emergency_shutdown_failed", error=str(shutdown_error), exc_info=True)
   finally:
     await app.shutdown()
 

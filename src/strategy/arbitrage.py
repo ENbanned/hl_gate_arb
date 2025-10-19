@@ -13,7 +13,6 @@ from src.utils.logging import get_logger
 from src.utils.emergency_shutdown import emergency_close_all
 
 
-
 log = get_logger(__name__)
 
 
@@ -156,36 +155,26 @@ class ArbitrageStrategy:
 
 
   async def _handle_partial_close(self, position: Position, gate_exists: bool, hl_exists: bool):
-    log.critical(
-      "handling_partial_close",
-      position_id=position.id,
-      coin=position.coin,
-      gate_exists=gate_exists,
-      hl_exists=hl_exists
-    )
-    
-    position.status = PositionStatus.FAILED
-    
-    try:
-      if gate_exists and not hl_exists:
-        log.critical("closing_orphaned_gate_position", coin=position.coin)
-        side = PositionSide.LONG if position.buy_exchange == ExchangeName.GATE else PositionSide.SHORT
-        await self.gate.close_position(position.coin, side)
+      log.critical(
+        "handling_partial_close",
+        position_id=position.id,
+        coin=position.coin,
+        gate_exists=gate_exists,
+        hl_exists=hl_exists
+      )
       
-      elif hl_exists and not gate_exists:
-        log.critical("closing_orphaned_hl_position", coin=position.coin)
-        side = PositionSide.LONG if position.buy_exchange == ExchangeName.HYPERLIQUID else PositionSide.SHORT
-        await self.hyperliquid.close_position(position.coin, side)
-    
-    except Exception as e:
-      log.error("failed_to_close_orphaned_position", coin=position.coin, error=str(e))
-    
-    del self.active_positions[position.id]
-    del self.position_entry_balances[position.id]
-    self.closed_positions.append(position)
-    
-    self.risk_manager.emergency_stop = True
-    log.critical("emergency_stop_triggered_partial_close", coin=position.coin)
+      position.status = PositionStatus.FAILED
+      
+      log.critical("emergency_shutdown_initiated_partial_close", coin=position.coin)
+      
+      await emergency_close_all(self.gate, self.hyperliquid)
+      
+      del self.active_positions[position.id]
+      del self.position_entry_balances[position.id]
+      self.closed_positions.append(position)
+      
+      self.risk_manager.emergency_stop = True
+      log.critical("emergency_stop_triggered_partial_close", coin=position.coin)
 
 
   async def _scan_and_execute(self):
