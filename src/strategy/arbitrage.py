@@ -10,6 +10,8 @@ from src.core.spread import SpreadCalculator
 from src.exchanges.gate import GateExchange
 from src.exchanges.hyperliquid import HyperliquidExchange
 from src.utils.logging import get_logger
+from src.utils.emergency_shutdown import emergency_close_all
+
 
 
 log = get_logger(__name__)
