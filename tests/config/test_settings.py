@@ -4,6 +4,7 @@ from unittest.mock import patch
 import pytest
 
 from src.config.settings import PositionSizingRule, Settings
+from pydantic import ValidationError
 
 
 def test_position_sizing_rule_matches():
@@ -22,8 +23,8 @@ def test_settings_defaults():
     "GATE_API_SECRET": "test_secret",
     "HYPERLIQUID_PRIVATE_KEY": "0x123",
     "HYPERLIQUID_ACCOUNT_ADDRESS": "0xabc"
-  }):
-    settings = Settings()
+  }, clear=True):
+    settings = Settings(_env_file=None)
     
     assert settings.min_spread_pct == 2.5
     assert settings.max_position_time_minutes == 20
@@ -138,5 +139,5 @@ def test_get_balance_pct_for_spread_empty_rules():
 
 def test_settings_missing_required_fields():
   with patch.dict(os.environ, {}, clear=True):
-    with pytest.raises(Exception):
-      Settings()
+    with pytest.raises(ValidationError):
+      Settings(_env_file=None)

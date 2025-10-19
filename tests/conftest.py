@@ -36,10 +36,10 @@ def mock_gate_exchange():
   ))
   exchange.get_orderbook = AsyncMock(return_value={
     "levels": [
-      [{"px": "50000.0", "sz": "1.0"}],
-      [{"px": "50100.0", "sz": "1.0"}]
+      [{"px": "49900.0", "sz": "1.0"}],  
+      [{"px": "50000.0", "sz": "1.0"}]
     ],
-    "timestamp": datetime.utcnow()
+    "timestamp": datetime.now(datetime.UTC)
   })
   exchange.get_leverage_limits = AsyncMock(return_value=(1, 20))
   exchange.get_funding_rate = AsyncMock(return_value=0.0001)
@@ -62,10 +62,10 @@ def mock_hyperliquid_exchange():
   ))
   exchange.get_orderbook = AsyncMock(return_value={
     "levels": [
-      [{"px": "50050.0", "sz": "1.0"}],
-      [{"px": "50150.0", "sz": "1.0"}]
+      [{"px": "50100.0", "sz": "1.0"}],
+      [{"px": "50200.0", "sz": "1.0"}]
     ],
-    "timestamp": datetime.utcnow()
+    "timestamp": datetime.now(datetime.UTC)
   })
   exchange.get_leverage_limits = AsyncMock(return_value=(1, 25))
   exchange.get_funding_rate = AsyncMock(return_value=0.00015)

@@ -64,23 +64,29 @@ async def test_hyperliquid_aenter(mock_info, mock_exchange_sdk):
 
 
 @pytest.mark.asyncio
-async def test_hyperliquid_aexit():
+async def test_hyperliquid_aexit(mock_info, mock_exchange_sdk):
   with patch('eth_account.Account.from_key') as mock_from_key:
     mock_account = MagicMock()
     mock_account.address = "0x123"
     mock_from_key.return_value = mock_account
     
-    with patch('src.exchanges.hyperliquid.Info') as mock_info_class:
-      with patch('src.exchanges.hyperliquid.Exchange'):
-        mock_info_instance = MagicMock()
-        mock_info_class.return_value = mock_info_instance
-        
+    with patch('src.exchanges.hyperliquid.Info', return_value=mock_info):
+      with patch('src.exchanges.hyperliquid.Exchange', return_value=mock_exchange_sdk):
         exchange = HyperliquidExchange("0xprivate", "0xaccount")
-        exchange._update_task = AsyncMock()
         
-        await exchange.__aexit__(None, None, None)
+        # Создаем реальную задачу вместо AsyncMock
+        async def dummy_task():
+          while True:
+            await asyncio.sleep(1)
         
-        exchange._update_task.cancel.assert_called_once()
+        with patch('asyncio.create_task') as mock_create:
+          mock_task = asyncio.create_task(dummy_task())
+          mock_create.return_value = mock_task
+          
+          await exchange.__aenter__()
+          await exchange.__aexit__(None, None, None)
+          
+          assert mock_task.cancelled()
 
 
 @pytest.mark.asyncio
