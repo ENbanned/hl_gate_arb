@@ -22,57 +22,75 @@ class SpreadCalculator:
 
 
   async def calculate_spread(
-    self, 
-    coin: str, 
-    size_usd: float,
-    leverage: int
-  ) -> tuple[Spread | None, Spread | None]:
-    
-    gate_book = await self.gate.get_orderbook(coin)
-    hl_book = await self.hyperliquid.get_orderbook(coin)
-    
-    if not gate_book or not hl_book:
-      return None, None
-    
-    if not gate_book.get("levels") or not hl_book.get("levels"):
-      return None, None
-    
-    gate_bids = gate_book["levels"][0]
-    gate_asks = gate_book["levels"][1]
-    hl_bids = hl_book["levels"][0]
-    hl_asks = hl_book["levels"][1]
-    
-    if not gate_bids or not gate_asks or not hl_bids or not hl_asks:
-      return None, None
-    
-    gate_bid = float(gate_bids[0]["px"])
-    gate_ask = float(gate_asks[0]["px"])
-    hl_bid = float(hl_bids[0]["px"])
-    hl_ask = float(hl_asks[0]["px"])
-    
-    gate_to_hl = self._calculate_directional_spread(
-      coin=coin,
-      buy_exchange=self.gate,
-      sell_exchange=self.hyperliquid,
-      buy_price=gate_ask,
-      sell_price=hl_bid,
-      size_usd=size_usd,
-      leverage=leverage,
-      direction="gate_to_hl"
-    )
-    
-    hl_to_gate = self._calculate_directional_spread(
-      coin=coin,
-      buy_exchange=self.hyperliquid,
-      sell_exchange=self.gate,
-      buy_price=hl_ask,
-      sell_price=gate_bid,
-      size_usd=size_usd,
-      leverage=leverage,
-      direction="hl_to_gate"
-    )
-    
-    return gate_to_hl, hl_to_gate
+      self, 
+      coin: str, 
+      size_usd: float,
+      leverage: int
+    ) -> tuple[Spread | None, Spread | None]:
+      
+      gate_book = await self.gate.get_orderbook(coin)
+      hl_book = await self.hyperliquid.get_orderbook(coin)
+      
+      if not gate_book or not hl_book:
+        return None, None
+      
+      if not gate_book.get("levels") or not hl_book.get("levels"):
+        return None, None
+      
+      gate_bids = gate_book["levels"][0]
+      gate_asks = gate_book["levels"][1]
+      hl_bids = hl_book["levels"][0]
+      hl_asks = hl_book["levels"][1]
+      
+      if not gate_bids or not gate_asks or not hl_bids or not hl_asks:
+        return None, None
+      
+      gate_bid = float(gate_bids[0]["px"])
+      gate_ask = float(gate_asks[0]["px"])
+      hl_bid = float(hl_bids[0]["px"])
+      hl_ask = float(hl_asks[0]["px"])
+      
+      gate_to_hl = self._calculate_directional_spread(
+        coin=coin,
+        buy_exchange=self.gate,
+        sell_exchange=self.hyperliquid,
+        buy_price=gate_ask,
+        sell_price=hl_bid,
+        size_usd=size_usd,
+        leverage=leverage,
+        direction="gate_to_hl"
+      )
+      
+      hl_to_gate = self._calculate_directional_spread(
+        coin=coin,
+        buy_exchange=self.hyperliquid,
+        sell_exchange=self.gate,
+        buy_price=hl_ask,
+        sell_price=gate_bid,
+        size_usd=size_usd,
+        leverage=leverage,
+        direction="hl_to_gate"
+      )
+      
+      best_spread = None
+      if gate_to_hl and hl_to_gate:
+        best_spread = gate_to_hl if gate_to_hl.net_spread_pct > hl_to_gate.net_spread_pct else hl_to_gate
+      elif gate_to_hl:
+        best_spread = gate_to_hl
+      elif hl_to_gate:
+        best_spread = hl_to_gate
+      
+      if best_spread and best_spread.net_spread_pct >= 0.5:
+        log.debug(
+          "spread_detected",
+          coin=coin,
+          direction=best_spread.direction,
+          net_spread=f"{best_spread.net_spread_pct:.3f}%",
+          gross_spread=f"{best_spread.gross_spread_pct:.3f}%",
+          funding_cost=f"{best_spread.funding_cost_pct:.3f}%"
+        )
+      
+      return gate_to_hl, hl_to_gate
 
 
   def _calculate_directional_spread(
