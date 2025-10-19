@@ -81,14 +81,27 @@ class SpreadCalculator:
         best_spread = hl_to_gate
       
       if best_spread and best_spread.net_spread_pct >= 0.5:
-        log.info(
-          "spread_detected",
-          coin=coin,
-          direction=best_spread.direction,
-          net_spread=f"{best_spread.net_spread_pct:.3f}%",
-          gross_spread=f"{best_spread.gross_spread_pct:.3f}%",
-          funding_cost=f"{best_spread.funding_cost_pct:.3f}%"
-        )
+        coin = best_spread.coin
+        
+        if not hasattr(self, 'log_counters'):
+          self.log_counters = {}
+        
+        if coin not in self.log_counters:
+          self.log_counters[coin] = 0
+        
+        self.log_counters[coin] += 1
+        
+        should_log = self.log_counters[coin] % 10 == 1 if coin == "MET" else True
+        
+        if should_log:
+          log.info(
+            "spread_detected",
+            coin=coin,
+            direction=best_spread.direction,
+            net_spread=f"{best_spread.net_spread_pct:.3f}%",
+            gross_spread=f"{best_spread.gross_spread_pct:.3f}%",
+            funding_cost=f"{best_spread.funding_cost_pct:.3f}%"
+          )
       
       return gate_to_hl, hl_to_gate
 
