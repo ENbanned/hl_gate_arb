@@ -17,6 +17,7 @@ CONSOLE_EVENTS = {
   "application_shutdown_complete",
   "strategy_initialized",
   "strategy_started",
+  "spread_detected",
   "spread_opportunity_detected",
   "position_opened",
   "position_closed",
