@@ -1,6 +1,8 @@
 import asyncio
 from datetime import datetime, UTC
 
+from tenacity import retry, stop_after_attempt, wait_exponential
+
 import eth_account
 from eth_account.signers.local import LocalAccount
 from hyperliquid.exchange import Exchange
@@ -175,7 +177,11 @@ class HyperliquidExchange:
     
     return slippage_pct
 
-
+  @retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    reraise=True
+  )
   async def open_position(
     self, 
     coin: str, 

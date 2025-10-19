@@ -125,6 +125,9 @@ class SpreadCalculator:
     
     net_spread_pct = gross_spread_pct - funding_cost_pct
     
+    if net_spread_pct <= 0:
+      return None
+    
     estimated_profit = (net_spread_pct / 100) * size_usd * leverage
     
     if net_spread_pct < 0:

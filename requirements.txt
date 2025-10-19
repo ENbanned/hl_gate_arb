@@ -3,6 +3,7 @@ pydantic_settings==2.11.0
 
 structlog==25.4.0
 colorama==0.4.6
+tenacity==9.1.2
 
 eth_account==0.13.7
 

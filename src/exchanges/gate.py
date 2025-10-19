@@ -3,6 +3,7 @@ from datetime import datetime, UTC
 
 import gate_api
 from gate_api import ApiClient, Configuration, FuturesApi, FuturesOrder
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from src.core.models import Balance, ExchangeName, OrderResult, PositionSide
 from src.utils.logging import get_logger
@@ -184,7 +185,11 @@ class GateExchange:
     
     return slippage_pct
 
-
+  @retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    reraise=True
+  )
   async def open_position(
     self, 
     coin: str, 

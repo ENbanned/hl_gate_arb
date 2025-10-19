@@ -240,7 +240,11 @@ class ArbitrageStrategy:
         if not self.active_positions:
           continue
         
-        for position_id, position in list(self.active_positions.items()):
+        positions_snapshot = list(self.active_positions.items())
+        
+        for position_id, position in positions_snapshot:
+          if position_id not in self.active_positions:
+            continue
           await self._check_position(position_id, position)
       
       except Exception as e:
