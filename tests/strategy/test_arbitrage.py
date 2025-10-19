@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -316,7 +316,7 @@ async def test_check_position_time_limit(mock_settings, mock_gate_exchange, mock
   strategy.active_positions["test_pos_1"] = sample_position
   strategy.position_entry_balances["test_pos_1"] = 10000.0
   
-  sample_position.opened_at = datetime.utcnow() - timedelta(minutes=25)
+  sample_position.opened_at = datetime.now(datetime.UTC) - timedelta(minutes=25)
   
   normal_spread = Spread(
     coin="BTC",
@@ -492,16 +492,18 @@ async def test_shutdown_closes_all_positions(mock_gate_exchange, mock_hyperliqui
 async def test_shutdown_cancels_tasks(mock_gate_exchange, mock_hyperliquid_exchange):
   strategy = ArbitrageStrategy(mock_gate_exchange, mock_hyperliquid_exchange)
   
-  mock_monitoring_task = AsyncMock()
-  mock_funding_task = AsyncMock()
+  # Создаем реальные задачи
+  async def dummy():
+    while True:
+      await asyncio.sleep(1)
   
-  strategy._monitoring_task = mock_monitoring_task
-  strategy._funding_update_task = mock_funding_task
+  strategy._monitoring_task = asyncio.create_task(dummy())
+  strategy._funding_update_task = asyncio.create_task(dummy())
   
   await strategy.shutdown()
   
-  mock_monitoring_task.cancel.assert_called_once()
-  mock_funding_task.cancel.assert_called_once()
+  assert strategy._monitoring_task.cancelled()
+  assert strategy._funding_update_task.cancelled()
 
 
 @pytest.mark.asyncio

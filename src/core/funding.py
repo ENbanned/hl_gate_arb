@@ -27,13 +27,13 @@ class FundingManager:
             exchange=ExchangeName.GATE,
             coin=coin,
             rate=gate_rate,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(datetime.UTC),
           ),
           ExchangeName.HYPERLIQUID: FundingRate(
             exchange=ExchangeName.HYPERLIQUID,
             coin=coin,
             rate=hl_rate,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(datetime.UTC),
           ),
         }
       

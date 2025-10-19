@@ -136,7 +136,7 @@ def sample_position(sample_spread):
     accumulated_funding_cost=0.0,
     leverage=10,
     size_usd=100.0,
-    opened_at=datetime.utcnow(),
+    opened_at=datetime.now(datetime.UTC),
     closed_at=None,
     status=PositionStatus.OPEN
   )
@@ -148,6 +148,6 @@ def sample_funding_rate():
     exchange=ExchangeName.GATE,
     coin="BTC",
     rate=0.0001,
-    timestamp=datetime.utcnow(),
+    timestamp=datetime.now(datetime.UTC),
     next_funding_time=None
   )

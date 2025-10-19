@@ -57,7 +57,7 @@ class HyperliquidExchange:
           if msg["channel"] == "l2Book":
             self.orderbooks[coin_name] = {
               "levels": msg["data"]["levels"],
-              "timestamp": datetime.utcnow()
+              "timestamp": datetime.now(datetime.UTC)
             }
         return handler
       

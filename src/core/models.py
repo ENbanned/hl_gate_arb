@@ -113,12 +113,12 @@ class Position:
   def is_expired(self, max_minutes: int) -> bool:
     if self.closed_at:
       return False
-    elapsed = (datetime.utcnow() - self.opened_at).total_seconds() / 60
+    elapsed = (datetime.now(datetime.UTC) - self.opened_at).total_seconds() / 60
     return elapsed >= max_minutes
   
   
   def get_duration_minutes(self) -> float:
-    end_time = self.closed_at or datetime.utcnow()
+    end_time = self.closed_at or datetime.now(datetime.UTC)
     return (end_time - self.opened_at).total_seconds() / 60
   
   

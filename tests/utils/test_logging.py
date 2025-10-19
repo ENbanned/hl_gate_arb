@@ -192,11 +192,13 @@ def test_setup_logging_no_console(mock_basicConfig, mock_mkdir):
 
 
 @patch('pathlib.Path.mkdir')
+@patch('logging.handlers.RotatingFileHandler')
 @patch('logging.basicConfig')
-def test_setup_logging_custom_log_dir(mock_basicConfig, mock_mkdir):
+def test_setup_logging_custom_log_dir(mock_basicConfig, mock_handler, mock_mkdir):
   setup_logging(log_level="INFO", log_dir="custom_logs")
   
   mock_mkdir.assert_called_once()
+  assert mock_handler.call_count == 2
 
 
 def test_get_logger():

@@ -212,7 +212,7 @@ class ArbitrageStrategy:
       accumulated_funding_cost=0.0,
       leverage=spread.leverage,
       size_usd=spread.position_size_usd,
-      opened_at=datetime.utcnow(),
+      opened_at=datetime.now(datetime.UTC),
       closed_at=None,
       status=PositionStatus.OPEN
     )
@@ -317,7 +317,7 @@ class ArbitrageStrategy:
       )
       return
     
-    position.closed_at = datetime.utcnow()
+    position.closed_at = datetime.now(datetime.UTC)
     position.status = PositionStatus.CLOSED
     
     gate_balance_after = await self.gate.get_balance()

@@ -102,7 +102,7 @@ class GateExchange:
     
     return {
       "levels": [bids, asks],
-      "timestamp": datetime.utcnow()
+      "timestamp": datetime.now(datetime.UTC)
     }
 
 

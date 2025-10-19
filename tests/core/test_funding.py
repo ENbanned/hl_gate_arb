@@ -61,7 +61,7 @@ def test_get_funding_rate_existing(mock_gate_exchange, mock_hyperliquid_exchange
       exchange=ExchangeName.GATE,
       coin="BTC",
       rate=0.0001,
-      timestamp=datetime.utcnow()
+      timestamp=datetime.now(datetime.UTC)
     )
   }
   
@@ -83,7 +83,7 @@ def test_get_funding_rate_missing_exchange(mock_gate_exchange, mock_hyperliquid_
       exchange=ExchangeName.GATE,
       coin="BTC",
       rate=0.0001,
-      timestamp=datetime.utcnow()
+      timestamp=datetime.now(datetime.UTC)
     )
   }
   
@@ -98,13 +98,13 @@ def test_calculate_funding_cost_gate_buy(mock_gate_exchange, mock_hyperliquid_ex
       exchange=ExchangeName.GATE,
       coin="BTC",
       rate=0.0001,
-      timestamp=datetime.utcnow()
+      timestamp=datetime.now(datetime.UTC)
     ),
     ExchangeName.HYPERLIQUID: FundingRate(
       exchange=ExchangeName.HYPERLIQUID,
       coin="BTC",
       rate=0.00015,
-      timestamp=datetime.utcnow()
+      timestamp=datetime.now(datetime.UTC)
     )
   }
   
@@ -129,13 +129,13 @@ def test_calculate_funding_cost_hyperliquid_buy(mock_gate_exchange, mock_hyperli
       exchange=ExchangeName.GATE,
       coin="BTC",
       rate=0.0001,
-      timestamp=datetime.utcnow()
+      timestamp=datetime.now(datetime.UTC)
     ),
     ExchangeName.HYPERLIQUID: FundingRate(
       exchange=ExchangeName.HYPERLIQUID,
       coin="BTC",
       rate=0.00015,
-      timestamp=datetime.utcnow()
+      timestamp=datetime.now(datetime.UTC)
     )
   }
   
@@ -160,13 +160,13 @@ def test_is_funding_acceptable_within_threshold(mock_gate_exchange, mock_hyperli
       exchange=ExchangeName.GATE,
       coin="BTC",
       rate=0.0001,
-      timestamp=datetime.utcnow()
+      timestamp=datetime.now(datetime.UTC)
     ),
     ExchangeName.HYPERLIQUID: FundingRate(
       exchange=ExchangeName.HYPERLIQUID,
       coin="BTC",
       rate=0.00015,
-      timestamp=datetime.utcnow()
+      timestamp=datetime.now(datetime.UTC)
     )
   }
   
@@ -187,13 +187,13 @@ def test_is_funding_acceptable_exceeds_threshold(mock_gate_exchange, mock_hyperl
       exchange=ExchangeName.GATE,
       coin="BTC",
       rate=0.0001,
-      timestamp=datetime.utcnow()
+      timestamp=datetime.now(datetime.UTC)
     ),
     ExchangeName.HYPERLIQUID: FundingRate(
       exchange=ExchangeName.HYPERLIQUID,
       coin="BTC",
       rate=0.0005,
-      timestamp=datetime.utcnow()
+      timestamp=datetime.now(datetime.UTC)
     )
   }
   
