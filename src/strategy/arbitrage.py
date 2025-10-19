@@ -74,8 +74,15 @@ class ArbitrageStrategy:
         await asyncio.sleep(2)
       
       except Exception as e:
-        log.error("strategy_loop_error", error=str(e), exc_info=True)
-        await asyncio.sleep(5)
+          log.error("strategy_loop_error", error=str(e), exc_info=True)
+          
+          if self.active_positions:
+              log.critical("strategy_loop_error_has_positions", count=len(self.active_positions))
+              await emergency_close_all(self.gate, self.hyperliquid)
+              self.risk_manager.emergency_stop = True
+              break
+          
+          await asyncio.sleep(5)
     
     if self.risk_manager.should_stop_trading():
       log.error("strategy_stopped_emergency", **self.risk_manager.get_performance_summary())
@@ -270,11 +277,23 @@ class ArbitrageStrategy:
       )
       
       if buy_result and buy_result.success:
-        await buy_exchange.close_position(spread.coin, PositionSide.LONG)
-      
+          try:
+              await buy_exchange.close_position(spread.coin, PositionSide.LONG)
+          except Exception as e:
+              log.critical("rollback_close_failed_buy", coin=spread.coin, error=str(e))
+              await emergency_close_all(self.gate, self.hyperliquid)
+              self.risk_manager.emergency_stop = True
+              return
+
       if sell_result and sell_result.success:
-        await sell_exchange.close_position(spread.coin, PositionSide.SHORT)
-      
+          try:
+              await sell_exchange.close_position(spread.coin, PositionSide.SHORT)
+          except Exception as e:
+              log.critical("rollback_close_failed_sell", coin=spread.coin, error=str(e))
+              await emergency_close_all(self.gate, self.hyperliquid)
+              self.risk_manager.emergency_stop = True
+              return
+
       return
     
     position = Position(
