@@ -32,6 +32,7 @@ class ArbitrageStrategy:
     
     self._monitoring_task = None
     self._funding_update_task = None
+    self._consistency_check_task = None
     self._shutdown_requested = False
 
 
@@ -64,6 +65,7 @@ class ArbitrageStrategy:
     
     self._monitoring_task = asyncio.create_task(self._monitor_positions_loop())
     self._funding_update_task = asyncio.create_task(self._update_funding_loop())
+    self._consistency_check_task = asyncio.create_task(self._check_consistency_loop())
     
     while not self.risk_manager.should_stop_trading() and not self._shutdown_requested:
       try:
@@ -95,6 +97,93 @@ class ArbitrageStrategy:
       except Exception as e:
         log.error("funding_update_error", error=str(e))
         await asyncio.sleep(60)
+
+
+  async def _check_consistency_loop(self):
+    await asyncio.sleep(30)
+    
+    while not self._shutdown_requested:
+      try:
+        await self._verify_positions_consistency()
+        await asyncio.sleep(60)
+      
+      except Exception as e:
+        log.error("consistency_check_error", error=str(e))
+        await asyncio.sleep(60)
+
+
+  async def _verify_positions_consistency(self):
+    if not self.active_positions:
+      return
+    
+    try:
+      gate_positions = await self.gate.get_open_positions()
+      hl_positions = await self.hyperliquid.get_open_positions()
+      
+      gate_coins = {p["coin"]: p for p in gate_positions}
+      hl_coins = {p["coin"]: p for p in hl_positions}
+      
+      for pos_id, position in list(self.active_positions.items()):
+        coin = position.coin
+        
+        gate_exists = coin in gate_coins
+        hl_exists = coin in hl_coins
+        
+        if position.buy_exchange == ExchangeName.GATE:
+          expected_gate = True
+          expected_hl = True
+        else:
+          expected_gate = True
+          expected_hl = True
+        
+        if gate_exists != expected_gate or hl_exists != expected_hl:
+          log.critical(
+            "position_inconsistency_detected",
+            position_id=pos_id,
+            coin=coin,
+            gate_exists=gate_exists,
+            hl_exists=hl_exists,
+            expected_gate=expected_gate,
+            expected_hl=expected_hl
+          )
+          
+          await self._handle_partial_close(position, gate_exists, hl_exists)
+    
+    except Exception as e:
+      log.error("verify_positions_error", error=str(e))
+
+
+  async def _handle_partial_close(self, position: Position, gate_exists: bool, hl_exists: bool):
+    log.critical(
+      "handling_partial_close",
+      position_id=position.id,
+      coin=position.coin,
+      gate_exists=gate_exists,
+      hl_exists=hl_exists
+    )
+    
+    position.status = PositionStatus.FAILED
+    
+    try:
+      if gate_exists and not hl_exists:
+        log.critical("closing_orphaned_gate_position", coin=position.coin)
+        side = PositionSide.LONG if position.buy_exchange == ExchangeName.GATE else PositionSide.SHORT
+        await self.gate.close_position(position.coin, side)
+      
+      elif hl_exists and not gate_exists:
+        log.critical("closing_orphaned_hl_position", coin=position.coin)
+        side = PositionSide.LONG if position.buy_exchange == ExchangeName.HYPERLIQUID else PositionSide.SHORT
+        await self.hyperliquid.close_position(position.coin, side)
+    
+    except Exception as e:
+      log.error("failed_to_close_orphaned_position", coin=position.coin, error=str(e))
+    
+    del self.active_positions[position.id]
+    del self.position_entry_balances[position.id]
+    self.closed_positions.append(position)
+    
+    self.risk_manager.emergency_stop = True
+    log.critical("emergency_stop_triggered_partial_close", coin=position.coin)
 
 
   async def _scan_and_execute(self):
@@ -311,14 +400,35 @@ class ArbitrageStrategy:
     if isinstance(sell_close_result, Exception):
       sell_close_result = None
     
-    if not buy_close_result or not buy_close_result.success or not sell_close_result or not sell_close_result.success:
-      log.error(
+    buy_success = buy_close_result and buy_close_result.success
+    sell_success = sell_close_result and sell_close_result.success
+    
+    if not buy_success or not sell_success:
+      log.critical(
         "critical_close_failure",
         position_id=position_id,
         coin=position.coin,
-        buy_success=buy_close_result.success if buy_close_result else False,
-        sell_success=sell_close_result.success if sell_close_result else False
+        buy_success=buy_success,
+        sell_success=sell_success,
+        buy_error=buy_close_result.error if buy_close_result else "exception",
+        sell_error=sell_close_result.error if sell_close_result else "exception"
       )
+      
+      position.status = PositionStatus.FAILED
+      
+      del self.active_positions[position_id]
+      del self.position_entry_balances[position_id]
+      self.closed_positions.append(position)
+      
+      self.risk_manager.emergency_stop = True
+      
+      log.critical(
+        "emergency_stop_activated_partial_close",
+        position_id=position_id,
+        coin=position.coin,
+        message="Bot stopped due to partial position close. Manual intervention required."
+      )
+      
       return
     
     position.closed_at = datetime.now(UTC)
@@ -371,6 +481,13 @@ class ArbitrageStrategy:
       self._funding_update_task.cancel()
       try:
         await self._funding_update_task
+      except asyncio.CancelledError:
+        pass
+    
+    if self._consistency_check_task:
+      self._consistency_check_task.cancel()
+      try:
+        await self._consistency_check_task
       except asyncio.CancelledError:
         pass
     

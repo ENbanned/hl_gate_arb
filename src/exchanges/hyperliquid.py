@@ -127,6 +127,36 @@ class HyperliquidExchange:
       max_lev = int(asset.get("maxLeverage", 1))
       return (1, max_lev)
     return (1, 1)
+  
+  
+  async def get_open_positions(self) -> list[dict]:
+      try:
+        state = await asyncio.to_thread(self.info.user_state, self.address)
+        
+        result = []
+        if "assetPositions" in state:
+          for asset_pos in state["assetPositions"]:
+            if "position" in asset_pos:
+              pos = asset_pos["position"]
+              coin = pos.get("coin")
+              szi = float(pos.get("szi", 0))
+              
+              if szi != 0 and coin:
+                side = PositionSide.LONG if szi > 0 else PositionSide.SHORT
+                
+                result.append({
+                  "coin": coin,
+                  "side": side,
+                  "size": abs(szi),
+                  "entry_price": float(pos.get("entryPx", 0)),
+                  "unrealised_pnl": float(pos.get("unrealizedPnl", 0))
+                })
+        
+        return result
+      
+      except Exception as e:
+        log.error("get_open_positions_failed", error=str(e))
+        return []
 
 
   async def get_funding_rate(self, coin: str) -> float:

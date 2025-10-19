@@ -185,6 +185,34 @@ class GateExchange:
     
     return slippage_pct
 
+
+  async def get_open_positions(self) -> list[dict]:
+    try:
+      positions = await asyncio.to_thread(self.api.list_positions, self.settle)
+      
+      result = []
+      for pos in positions:
+        if pos.size != 0:
+          coin = pos.contract.replace("_USDT", "")
+          side = PositionSide.LONG if pos.size > 0 else PositionSide.SHORT
+          
+          result.append({
+            "coin": coin,
+            "side": side,
+            "size": abs(pos.size),
+            "contract": pos.contract,
+            "mode": pos.mode,
+            "entry_price": float(pos.entry_price),
+            "unrealised_pnl": float(pos.unrealised_pnl)
+          })
+      
+      return result
+    
+    except Exception as e:
+      log.error("get_open_positions_failed", error=str(e))
+      return []
+
+
   @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=2, max=10),
@@ -272,13 +300,14 @@ class GateExchange:
   async def close_position(self, coin: str, side: PositionSide) -> OrderResult:
     try:
       contract = f"{coin}_USDT"
-      
       auto_size_value = "close_long" if side == PositionSide.LONG else "close_short"
       
       order = FuturesOrder(
         contract=contract,
         size=0,
         auto_size=auto_size_value,
+        reduce_only=True,
+        close=False,
         price="0",
         tif="ioc"
       )
@@ -302,7 +331,12 @@ class GateExchange:
       )
     
     except Exception as e:
-      log.error("gate_close_position_failed", coin=coin, side=side.value, error=str(e))
+      log.error("gate_close_position_failed_auto_size", coin=coin, side=side.value, error=str(e))
+      
+      fallback_result = await self._close_position_fallback(coin, side)
+      if fallback_result.success:
+        return fallback_result
+      
       return OrderResult(
         exchange=self.name,
         coin=coin,
@@ -311,4 +345,72 @@ class GateExchange:
         executed_price=None,
         success=False,
         error=str(e)
+      )
+
+
+  async def _close_position_fallback(self, coin: str, side: PositionSide) -> OrderResult:
+    try:
+      log.info("gate_attempting_fallback_close", coin=coin, side=side.value)
+      
+      contract = f"{coin}_USDT"
+      positions = await asyncio.to_thread(self.api.list_positions, self.settle)
+      
+      position = None
+      for pos in positions:
+        if pos.contract == contract and pos.size != 0:
+          pos_side = PositionSide.LONG if pos.size > 0 else PositionSide.SHORT
+          if pos_side == side:
+            position = pos
+            break
+      
+      if not position:
+        log.warning("gate_fallback_no_position", coin=coin, side=side.value)
+        return OrderResult(
+          exchange=self.name,
+          coin=coin,
+          side=side,
+          size=0,
+          executed_price=None,
+          success=False,
+          error="position_not_found_in_fallback"
+        )
+      
+      close_size = -int(position.size)
+      
+      order = FuturesOrder(
+        contract=contract,
+        size=close_size,
+        reduce_only=True,
+        price="0",
+        tif="ioc"
+      )
+      
+      result = await asyncio.to_thread(
+        self.api.create_futures_order,
+        self.settle,
+        order
+      )
+      
+      log.info("gate_fallback_close_success", coin=coin, side=side.value, close_size=close_size)
+      
+      return OrderResult(
+        exchange=self.name,
+        coin=coin,
+        side=side,
+        size=abs(close_size),
+        executed_price=float(result.fill_price) if hasattr(result, "fill_price") and result.fill_price else None,
+        success=True,
+        order_id=str(result.id)
+      )
+    
+    except Exception as e:
+      log.error("gate_fallback_close_failed", coin=coin, side=side.value, error=str(e))
+      return OrderResult(
+        exchange=self.name,
+        coin=coin,
+        side=side,
+        size=0,
+        executed_price=None,
+        success=False,
+        error=f"fallback_failed: {str(e)}"
       )

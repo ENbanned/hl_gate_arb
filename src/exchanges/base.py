@@ -33,3 +33,7 @@ class ExchangeProtocol(Protocol):
   
   async def get_funding_rate(self, coin: str) -> float:
     ...
+  
+  
+  async def get_open_positions(self) -> list[dict]:
+    ...
