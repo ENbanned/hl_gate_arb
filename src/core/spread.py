@@ -80,7 +80,7 @@ class SpreadCalculator:
       elif hl_to_gate:
         best_spread = hl_to_gate
       
-      if best_spread and best_spread.net_spread_pct >= 0.01:
+      if best_spread and best_spread.net_spread_pct >= 0.5:
         log.info(
           "spread_detected",
           coin=coin,
