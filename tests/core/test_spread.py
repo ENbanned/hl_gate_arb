@@ -20,7 +20,10 @@ async def test_spread_calculator_initialization(mock_gate_exchange, mock_hyperli
 @pytest.mark.asyncio
 async def test_calculate_spread_success(mock_gate_exchange, mock_hyperliquid_exchange):
   funding_manager = FundingManager(mock_gate_exchange, mock_hyperliquid_exchange)
-  funding_manager.funding_cache["BTC"] = {}
+  funding_manager.funding_cache["BTC"] = {
+    "gate": 0.0001,
+    "hyperliquid": 0.00015
+  }
   
   calculator = SpreadCalculator(mock_gate_exchange, mock_hyperliquid_exchange, funding_manager)
   
@@ -75,7 +78,10 @@ async def test_calculate_spread_negative_spread_returns_none(mock_gate_exchange,
   }
   
   funding_manager = FundingManager(mock_gate_exchange, mock_hyperliquid_exchange)
-  funding_manager.funding_cache["BTC"] = {}
+  funding_manager.funding_cache["BTC"] = {
+    "gate": 0.0001,
+    "hyperliquid": 0.00015
+  }
   
   calculator = SpreadCalculator(mock_gate_exchange, mock_hyperliquid_exchange, funding_manager)
   

@@ -74,19 +74,18 @@ async def test_hyperliquid_aexit(mock_info, mock_exchange_sdk):
       with patch('src.exchanges.hyperliquid.Exchange', return_value=mock_exchange_sdk):
         exchange = HyperliquidExchange("0xprivate", "0xaccount")
         
-        # Создаем реальную задачу вместо AsyncMock
         async def dummy_task():
-          while True:
-            await asyncio.sleep(1)
+          try:
+            while True:
+              await asyncio.sleep(1)
+          except asyncio.CancelledError:
+            pass
         
-        with patch('asyncio.create_task') as mock_create:
-          mock_task = asyncio.create_task(dummy_task())
-          mock_create.return_value = mock_task
-          
-          await exchange.__aenter__()
-          await exchange.__aexit__(None, None, None)
-          
-          assert mock_task.cancelled()
+        await exchange.__aenter__()
+        exchange._update_task = asyncio.create_task(dummy_task())
+        await exchange.__aexit__(None, None, None)
+        
+        assert exchange._update_task.cancelled()
 
 
 @pytest.mark.asyncio

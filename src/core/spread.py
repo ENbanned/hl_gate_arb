@@ -86,6 +86,9 @@ class SpreadCalculator:
     leverage: int,
     direction: str
   ) -> Spread | None:
+
+    if sell_price <= buy_price:
+      return None
     
     buy_slippage_pct = buy_exchange.calculate_slippage(coin, size_usd * leverage, is_buy=True)
     sell_slippage_pct = sell_exchange.calculate_slippage(coin, size_usd * leverage, is_buy=False)
@@ -107,6 +110,9 @@ class SpreadCalculator:
     sell_revenue_with_fees = sell_revenue_notional * (1 - sell_fee / 100)
     
     gross_spread_pct = ((sell_revenue_with_fees / buy_cost_with_fees) - 1) * 100
+    
+    if gross_spread_pct <= 0:
+      return None
     
     buy_funding_rate, sell_funding_rate, funding_cost_pct = self.funding_manager.calculate_funding_cost(
       coin=coin,
