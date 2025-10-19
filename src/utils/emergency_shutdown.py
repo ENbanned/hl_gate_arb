@@ -1,14 +1,17 @@
 import asyncio
 import sys
 from datetime import datetime, UTC
+from typing import TYPE_CHECKING
 
 from tenacity import retry, stop_after_attempt, wait_exponential, RetryError
 
 from src.config.settings import settings
 from src.core.models import PositionSide
-from src.exchanges.gate import GateExchange
-from src.exchanges.hyperliquid import HyperliquidExchange
 from src.utils.logging import get_logger
+
+if TYPE_CHECKING:
+  from src.exchanges.gate import GateExchange
+  from src.exchanges.hyperliquid import HyperliquidExchange
 
 
 log = get_logger(__name__)
@@ -16,7 +19,7 @@ log = get_logger(__name__)
 
 class EmergencyShutdown:
   
-  def __init__(self, gate: GateExchange = None, hyperliquid: HyperliquidExchange = None):
+  def __init__(self, gate: "GateExchange | None" = None, hyperliquid: "HyperliquidExchange | None" = None):
     self.gate = gate
     self.hyperliquid = hyperliquid
     self.own_exchanges = False
@@ -26,6 +29,9 @@ class EmergencyShutdown:
   async def initialize_exchanges(self):
     if not self.gate or not self.hyperliquid:
       log.info("emergency_initializing_exchanges")
+      
+      from src.exchanges.gate import GateExchange
+      from src.exchanges.hyperliquid import HyperliquidExchange
       
       self.gate = GateExchange(
         settings.gate_api_key,
@@ -205,7 +211,7 @@ class EmergencyShutdown:
       await self.cleanup_exchanges()
 
 
-async def emergency_close_all(gate: GateExchange = None, hyperliquid: HyperliquidExchange = None) -> bool:
+async def emergency_close_all(gate: "GateExchange | None" = None, hyperliquid: "HyperliquidExchange | None" = None) -> bool:
   shutdown = EmergencyShutdown(gate, hyperliquid)
   return await shutdown.run()
 
