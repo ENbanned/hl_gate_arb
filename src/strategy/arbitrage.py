@@ -377,113 +377,127 @@ class ArbitrageStrategy:
 
 
   async def _close_position(self, position_id: str, position: Position):
-    buy_exchange = self.gate if position.buy_exchange == ExchangeName.GATE else self.hyperliquid
-    sell_exchange = self.hyperliquid if position.sell_exchange == ExchangeName.HYPERLIQUID else self.gate
-    
-    buy_close_result, sell_close_result = await asyncio.gather(
-      buy_exchange.close_position(position.coin, PositionSide.LONG),
-      sell_exchange.close_position(position.coin, PositionSide.SHORT),
-      return_exceptions=True
-    )
-    
-    if isinstance(buy_close_result, Exception):
-      buy_close_result = None
-    if isinstance(sell_close_result, Exception):
-      sell_close_result = None
-    
-    buy_success = buy_close_result and buy_close_result.success
-    sell_success = sell_close_result and sell_close_result.success
-    
-    if not buy_success or not sell_success:
-      log.critical(
-        "critical_close_failure",
-        position_id=position_id,
-        coin=position.coin,
-        buy_success=buy_success,
-        sell_success=sell_success,
-        buy_error=buy_close_result.error if buy_close_result else "exception",
-        sell_error=sell_close_result.error if sell_close_result else "exception"
+      buy_exchange = self.gate if position.buy_exchange == ExchangeName.GATE else self.hyperliquid
+      sell_exchange = self.hyperliquid if position.sell_exchange == ExchangeName.HYPERLIQUID else self.gate
+      
+      buy_close_result, sell_close_result = await asyncio.gather(
+        buy_exchange.close_position(position.coin, PositionSide.LONG),
+        sell_exchange.close_position(position.coin, PositionSide.SHORT),
+        return_exceptions=True
       )
       
-      position.status = PositionStatus.FAILED
+      if isinstance(buy_close_result, Exception):
+        buy_close_result = None
+      if isinstance(sell_close_result, Exception):
+        sell_close_result = None
+      
+      buy_success = buy_close_result and buy_close_result.success
+      sell_success = sell_close_result and sell_close_result.success
+      
+      if not buy_success or not sell_success:
+        log.critical(
+          "critical_close_failure",
+          position_id=position_id,
+          coin=position.coin,
+          buy_success=buy_success,
+          sell_success=sell_success,
+          buy_error=buy_close_result.error if buy_close_result else "exception",
+          sell_error=sell_close_result.error if sell_close_result else "exception"
+        )
+        
+        position.status = PositionStatus.FAILED
+        
+        log.critical("emergency_shutdown_initiated_close_failure", position_id=position_id)
+        
+        await emergency_close_all(self.gate, self.hyperliquid)
+        
+        del self.active_positions[position_id]
+        del self.position_entry_balances[position_id]
+        self.closed_positions.append(position)
+        
+        self.risk_manager.emergency_stop = True
+        
+        log.critical(
+          "emergency_stop_activated_partial_close",
+          position_id=position_id,
+          coin=position.coin,
+          message="Bot stopped due to partial position close. All positions forcefully closed."
+        )
+        
+        return
+      
+      position.closed_at = datetime.now(UTC)
+      position.status = PositionStatus.CLOSED
+      
+      gate_balance_after = await self.gate.get_balance()
+      hl_balance_after = await self.hyperliquid.get_balance()
+      total_balance_after = gate_balance_after.account_value + hl_balance_after.account_value
+      
+      balance_before = self.position_entry_balances.get(position_id, 0)
+      realized_pnl = total_balance_after - balance_before
+      
+      position.realized_pnl = realized_pnl
+      
+      self.risk_manager.update_realized_pnl(realized_pnl, position.accumulated_funding_cost)
       
       del self.active_positions[position_id]
       del self.position_entry_balances[position_id]
       self.closed_positions.append(position)
       
-      self.risk_manager.emergency_stop = True
+      duration_minutes = position.get_duration_minutes()
       
-      log.critical(
-        "emergency_stop_activated_partial_close",
+      log.info(
+        "position_closed",
         position_id=position_id,
         coin=position.coin,
-        message="Bot stopped due to partial position close. Manual intervention required."
+        entry_spread=f"{position.entry_spread:.3f}%",
+        expected_profit=f"${position.expected_profit:.2f}",
+        realized_pnl=f"${realized_pnl:.2f}",
+        funding_cost=f"${position.accumulated_funding_cost:.2f}",
+        net_pnl=f"${realized_pnl - position.accumulated_funding_cost:.2f}",
+        duration_minutes=f"{duration_minutes:.1f}",
+        stop_loss=position.stop_loss_triggered,
+        time_limit=position.time_limit_triggered
       )
-      
-      return
-    
-    position.closed_at = datetime.now(UTC)
-    position.status = PositionStatus.CLOSED
-    
-    gate_balance_after = await self.gate.get_balance()
-    hl_balance_after = await self.hyperliquid.get_balance()
-    total_balance_after = gate_balance_after.account_value + hl_balance_after.account_value
-    
-    balance_before = self.position_entry_balances.get(position_id, 0)
-    realized_pnl = total_balance_after - balance_before
-    
-    position.realized_pnl = realized_pnl
-    
-    self.risk_manager.update_realized_pnl(realized_pnl, position.accumulated_funding_cost)
-    
-    del self.active_positions[position_id]
-    del self.position_entry_balances[position_id]
-    self.closed_positions.append(position)
-    
-    duration_minutes = position.get_duration_minutes()
-    
-    log.info(
-      "position_closed",
-      position_id=position_id,
-      coin=position.coin,
-      entry_spread=f"{position.entry_spread:.3f}%",
-      expected_profit=f"${position.expected_profit:.2f}",
-      realized_pnl=f"${realized_pnl:.2f}",
-      funding_cost=f"${position.accumulated_funding_cost:.2f}",
-      net_pnl=f"${realized_pnl - position.accumulated_funding_cost:.2f}",
-      duration_minutes=f"{duration_minutes:.1f}",
-      stop_loss=position.stop_loss_triggered,
-      time_limit=position.time_limit_triggered
-    )
 
 
   async def shutdown(self):
-    self._shutdown_requested = True
-    log.debug("strategy_shutting_down")
-    
-    if self._monitoring_task:
-      self._monitoring_task.cancel()
-      try:
-        await self._monitoring_task
-      except asyncio.CancelledError:
-        pass
-    
-    if self._funding_update_task:
-      self._funding_update_task.cancel()
-      try:
-        await self._funding_update_task
-      except asyncio.CancelledError:
-        pass
-    
-    if self._consistency_check_task:
-      self._consistency_check_task.cancel()
-      try:
-        await self._consistency_check_task
-      except asyncio.CancelledError:
-        pass
-    
-    for position_id, position in list(self.active_positions.items()):
-      log.debug("closing_position_on_shutdown", position_id=position_id, coin=position.coin)
-      await self._close_position(position_id, position)
-    
-    log.debug("strategy_shutdown_complete", **self.risk_manager.get_performance_summary())
+      self._shutdown_requested = True
+      log.debug("strategy_shutting_down")
+      
+      if self._monitoring_task:
+        self._monitoring_task.cancel()
+        try:
+          await self._monitoring_task
+        except asyncio.CancelledError:
+          pass
+      
+      if self._funding_update_task:
+        self._funding_update_task.cancel()
+        try:
+          await self._funding_update_task
+        except asyncio.CancelledError:
+          pass
+      
+      if self._consistency_check_task:
+        self._consistency_check_task.cancel()
+        try:
+          await self._consistency_check_task
+        except asyncio.CancelledError:
+          pass
+      
+      if self.active_positions:
+        log.info("shutdown_closing_all_positions", count=len(self.active_positions))
+        
+        try:
+          all_closed = await emergency_close_all(self.gate, self.hyperliquid)
+          
+          if not all_closed:
+            log.error("shutdown_some_positions_failed_to_close")
+          else:
+            log.info("shutdown_all_positions_closed")
+        
+        except Exception as e:
+          log.critical("shutdown_emergency_close_failed", error=str(e), exc_info=True)
+      
+      log.debug("strategy_shutdown_complete", **self.risk_manager.get_performance_summary())
