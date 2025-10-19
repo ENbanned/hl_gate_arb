@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime
+from datetime import datetime, UTC
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -39,7 +39,7 @@ def mock_gate_exchange():
       [{"px": "49900.0", "sz": "1.0"}],  
       [{"px": "50000.0", "sz": "1.0"}]
     ],
-    "timestamp": datetime.now(datetime.UTC)
+    "timestamp": datetime.now(UTC)
   })
   exchange.get_leverage_limits = AsyncMock(return_value=(1, 20))
   exchange.get_funding_rate = AsyncMock(return_value=0.0001)
@@ -65,7 +65,7 @@ def mock_hyperliquid_exchange():
       [{"px": "50100.0", "sz": "1.0"}],
       [{"px": "50200.0", "sz": "1.0"}]
     ],
-    "timestamp": datetime.now(datetime.UTC)
+    "timestamp": datetime.now(UTC)
   })
   exchange.get_leverage_limits = AsyncMock(return_value=(1, 25))
   exchange.get_funding_rate = AsyncMock(return_value=0.00015)
@@ -136,7 +136,7 @@ def sample_position(sample_spread):
     accumulated_funding_cost=0.0,
     leverage=10,
     size_usd=100.0,
-    opened_at=datetime.now(datetime.UTC),
+    opened_at=datetime.now(UTC),
     closed_at=None,
     status=PositionStatus.OPEN
   )
@@ -148,6 +148,6 @@ def sample_funding_rate():
     exchange=ExchangeName.GATE,
     coin="BTC",
     rate=0.0001,
-    timestamp=datetime.now(datetime.UTC),
+    timestamp=datetime.now(UTC),
     next_funding_time=None
   )

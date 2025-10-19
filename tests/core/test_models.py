@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 
 import pytest
 
@@ -47,7 +47,7 @@ def test_balance_dataclass():
 
 
 def test_funding_rate_dataclass():
-  now = datetime.now(datetime.UTC)
+  now = datetime.now(UTC)
   funding = FundingRate(
     exchange=ExchangeName.GATE,
     coin="BTC",
@@ -123,7 +123,7 @@ def test_order_result_failure():
 
 
 def test_position_is_expired():
-  now = datetime.now(datetime.UTC)
+  now = datetime.now(UTC)
   
   position = Position(
     id="test_1",
@@ -164,7 +164,7 @@ def test_position_is_expired():
 
 
 def test_position_is_expired_when_closed():
-  now = datetime.now(datetime.UTC)
+  now = datetime.now(UTC)
   
   position = Position(
     id="test_1",
@@ -204,7 +204,7 @@ def test_position_is_expired_when_closed():
 
 
 def test_position_get_duration_minutes():
-  now = datetime.now(datetime.UTC)
+  now = datetime.now(UTC)
   
   position = Position(
     id="test_1",
@@ -245,7 +245,7 @@ def test_position_get_duration_minutes():
 
 
 def test_position_get_duration_minutes_when_closed():
-  now = datetime.now(datetime.UTC)
+  now = datetime.now(UTC)
   opened = now - timedelta(minutes=20)
   closed = now - timedelta(minutes=5)
   
@@ -288,7 +288,7 @@ def test_position_get_duration_minutes_when_closed():
 
 
 def test_position_update_funding_cost_gate_buy():
-  now = datetime.now(datetime.UTC)
+  now = datetime.now(UTC)
   
   position = Position(
     id="test_1",
@@ -330,7 +330,7 @@ def test_position_update_funding_cost_gate_buy():
 
 
 def test_position_update_funding_cost_hyperliquid_buy():
-  now = datetime.now(datetime.UTC)
+  now = datetime.now(UTC)
   
   position = Position(
     id="test_1",
@@ -372,7 +372,7 @@ def test_position_update_funding_cost_hyperliquid_buy():
 
 
 def test_position_defaults():
-  now = datetime.now(datetime.UTC)
+  now = datetime.now(UTC)
   
   position = Position(
     id="test_1",

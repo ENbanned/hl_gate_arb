@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from unittest.mock import patch
 
 import pytest
@@ -87,7 +87,7 @@ def test_check_position_risk_time_limit(mock_settings, sample_position):
   mock_settings.max_position_time_minutes = 20
   
   manager = RiskManager()
-  sample_position.opened_at = datetime.now(datetime.UTC) - timedelta(minutes=25)
+  sample_position.opened_at = datetime.now(UTC) - timedelta(minutes=25)
   sample_position.entry_spread = 5.0
   current_spread = 5.0
   

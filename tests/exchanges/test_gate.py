@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime
+from datetime import datetime, UTC
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -152,7 +152,7 @@ async def test_get_balance(mock_gate_api):
 @pytest.mark.asyncio
 async def test_get_orderbook():
   exchange = GateExchange("test_key", "test_secret")
-  exchange.orderbooks["BTC"] = {"levels": [[], []], "timestamp": datetime.now(datetime.UTC)}
+  exchange.orderbooks["BTC"] = {"levels": [[], []], "timestamp": datetime.now(UTC)}
   
   book = await exchange.get_orderbook("BTC")
   

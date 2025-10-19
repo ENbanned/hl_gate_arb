@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, UTC
 
 from src.core.models import ExchangeName, FundingRate
 from src.exchanges.base import ExchangeProtocol
@@ -27,13 +27,13 @@ class FundingManager:
             exchange=ExchangeName.GATE,
             coin=coin,
             rate=gate_rate,
-            timestamp=datetime.now(datetime.UTC),
+            timestamp=datetime.now(UTC),
           ),
           ExchangeName.HYPERLIQUID: FundingRate(
             exchange=ExchangeName.HYPERLIQUID,
             coin=coin,
             rate=hl_rate,
-            timestamp=datetime.now(datetime.UTC),
+            timestamp=datetime.now(UTC),
           ),
         }
       

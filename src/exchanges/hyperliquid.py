@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime
+from datetime import datetime, UTC
 
 import eth_account
 from eth_account.signers.local import LocalAccount
@@ -57,7 +57,7 @@ class HyperliquidExchange:
           if msg["channel"] == "l2Book":
             self.orderbooks[coin_name] = {
               "levels": msg["data"]["levels"],
-              "timestamp": datetime.now(datetime.UTC)
+              "timestamp": datetime.now(UTC)
             }
         return handler
       

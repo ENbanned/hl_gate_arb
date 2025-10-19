@@ -316,7 +316,7 @@ async def test_check_position_time_limit(mock_settings, mock_gate_exchange, mock
   strategy.active_positions["test_pos_1"] = sample_position
   strategy.position_entry_balances["test_pos_1"] = 10000.0
   
-  sample_position.opened_at = datetime.now(datetime.UTC) - timedelta(minutes=25)
+  sample_position.opened_at = datetime.now(UTC) - timedelta(minutes=25)
   
   normal_spread = Spread(
     coin="BTC",

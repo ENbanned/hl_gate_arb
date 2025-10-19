@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime
+from datetime import datetime, UTC
 
 import gate_api
 from gate_api import ApiClient, Configuration, FuturesApi, FuturesOrder
@@ -102,7 +102,7 @@ class GateExchange:
     
     return {
       "levels": [bids, asks],
-      "timestamp": datetime.now(datetime.UTC)
+      "timestamp": datetime.now(UTC)
     }
 
 
