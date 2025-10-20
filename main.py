@@ -14,11 +14,20 @@ from settings import HYPERLIQUID_SECRET_KEY, HYPERLIQUID_ACCOUNT_ADDRESS
 
 class Hyperliquid:
     
-    def __init__(self, secret_key, account_address: str):
+    def __init__(
+      self, 
+      secret_key: str, 
+      account_address: str,
+      base_url: str = None,
+      skip_ws: bool = False,
+    ):
         self.secret_key = secret_key
         self.account_address = account_address
+        
+        account: LocalAccount = eth_account.Account.from_key(self.secret_key)
 
-        self.info = Info()
+        self.info = Info(base_url=base_url, skip_ws=skip_ws)
+        self.exchange = Exchange(account, base_url, account_address=self.account_address)
 
     
 
