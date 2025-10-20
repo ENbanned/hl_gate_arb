@@ -47,6 +47,9 @@ class HyperliquidExchange:
     self.funding_rates: dict[str, FundingRate] = {}
     self.universe: list[dict] = []
     self.coin_to_index: dict[str, int] = {}
+    self.leverage_limits_cache: dict[str, tuple[int, int]] = {}
+    self.meta_cache: dict = {}
+    self.meta_cache_time: datetime | None = None
     
     self.ws_task: asyncio.Task | None = None
     self.running = False
@@ -54,6 +57,7 @@ class HyperliquidExchange:
   
   async def connect(self):
     await self._load_universe()
+    await self._load_meta()
     self.running = True
     self.ws_task = asyncio.create_task(self._ws_handler())
     log.info(
@@ -78,10 +82,6 @@ class HyperliquidExchange:
     log.info("hyperliquid_disconnected")
   
   
-  @retry(
-    stop=stop_after_attempt(MAX_RETRIES),
-    wait=wait_exponential(multiplier=1, min=1, max=10),
-  )
   async def get_balance(self) -> Balance:
     try:
       response = await self._post(
@@ -117,29 +117,33 @@ class HyperliquidExchange:
       return cached
     
     try:
-      response = await self._post(
-        "/info",
-        {"type": "metaAndAssetCtxs"},
-      )
+      if not self.meta_cache or not self.meta_cache_time or \
+         (datetime.now() - self.meta_cache_time).seconds > 300:
+        response = await self._post(
+          "/info",
+          {"type": "metaAndAssetCtxs"},
+        )
+        
+        if response:
+          self.meta_cache = response
+          self.meta_cache_time = datetime.now()
       
-      if not response:
-        return None
-      
-      for ctx in response[1]:
-        if ctx.get("coin") == coin:
-          funding = ctx.get("funding")
-          if funding:
-            rate = float(funding) / 100
-            next_time = datetime.now().replace(
-              minute=0, second=0, microsecond=0
-            )
-            
-            fr = FundingRate(
-              rate=rate,
-              next_funding_time=next_time,
-            )
-            self.funding_rates[coin] = fr
-            return fr
+      if self.meta_cache and len(self.meta_cache) > 1:
+        for ctx in self.meta_cache[1]:
+          if ctx.get("coin") == coin:
+            funding = ctx.get("funding")
+            if funding:
+              rate = float(funding) / 100
+              next_time = datetime.now().replace(
+                minute=0, second=0, microsecond=0
+              )
+              
+              fr = FundingRate(
+                rate=rate,
+                next_funding_time=next_time,
+              )
+              self.funding_rates[coin] = fr
+              return fr
     except Exception as e:
       log.debug("hyperliquid_funding_error", coin=coin, error=str(e))
     
@@ -150,19 +154,28 @@ class HyperliquidExchange:
     if coin not in self.coin_to_index:
       return (1, 1)
     
+    if coin in self.leverage_limits_cache:
+      return self.leverage_limits_cache[coin]
+    
     try:
-      response = await self._post(
-        "/info",
-        {"type": "metaAndAssetCtxs"},
-      )
+      if not self.meta_cache or not self.meta_cache_time or \
+         (datetime.now() - self.meta_cache_time).seconds > 300:
+        response = await self._post(
+          "/info",
+          {"type": "metaAndAssetCtxs"},
+        )
+        
+        if response:
+          self.meta_cache = response
+          self.meta_cache_time = datetime.now()
       
-      if not response:
-        return (1, 10)
-      
-      for meta in response[0]:
-        if meta.get("name") == coin:
-          max_lev = int(meta.get("maxLeverage", 10))
-          return (1, max_lev)
+      if self.meta_cache:
+        for meta in self.meta_cache[0]:
+          if meta.get("name") == coin:
+            max_lev = int(meta.get("maxLeverage", 10))
+            result = (1, max_lev)
+            self.leverage_limits_cache[coin] = result
+            return result
     except Exception:
       pass
     
@@ -379,6 +392,18 @@ class HyperliquidExchange:
     except Exception as e:
       log.error("hyperliquid_universe_error", error=str(e))
       raise
+
+
+  async def _load_meta(self):
+    try:
+      response = await self._post("/info", {"type": "metaAndAssetCtxs"})
+      
+      if response:
+        self.meta_cache = response
+        self.meta_cache_time = datetime.now()
+        log.info("hyperliquid_meta_loaded")
+    except Exception as e:
+      log.warning("hyperliquid_meta_error", error=str(e))
   
   
   async def _update_leverage(self, coin_index: int, leverage: int):

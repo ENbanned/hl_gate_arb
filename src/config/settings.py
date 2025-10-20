@@ -41,7 +41,7 @@ class Settings(BaseSettings):
   position_check_interval_seconds: int = Field(default=10)
   consecutive_loss_limit: int = Field(default=3)
   
-  scan_interval_seconds: float = Field(default=3.0)
+  scan_interval_seconds: float = Field(default=8.0)
   funding_rate_update_seconds: int = Field(default=300)
   
   log_level: str = Field(default="INFO")

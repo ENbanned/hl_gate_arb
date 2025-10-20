@@ -1,3 +1,5 @@
+import asyncio
+
 from src.config.constants import (
   GATE_FEE_TAKER,
   HYPERLIQUID_FEE_TAKER,
@@ -141,8 +143,11 @@ class SpreadCalculator:
     
     opportunities = []
     
-    for coin in coins:
+    for idx, coin in enumerate(coins):
       try:
+        if idx > 0 and idx % 10 == 0:
+          await asyncio.sleep(0.5)
+        
         gate_lev_min, gate_lev_max = await self.gate.get_leverage_limits(coin)
         hl_lev_min, hl_lev_max = await self.hyperliquid.get_leverage_limits(coin)
         
