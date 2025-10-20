@@ -1,3 +1,4 @@
+import asyncio
 import getpass
 import json
 import os
@@ -8,13 +9,28 @@ from eth_account.signers.local import LocalAccount
 from hyperliquid.exchange import Exchange
 from hyperliquid.info import Info
 
+from settings import HYPERLIQUID_SECRET_KEY, HYPERLIQUID_ACCOUNT_ADDRESS
+
 
 class Hyperliquid:
     
-    def __init__(self, secret_key, account_address):
-        
-        
+    def __init__(self, secret_key, account_address: str):
+        self.secret_key = secret_key
+        self.account_address = account_address
 
+        self.info = Info()
+
+    
+
+
+
+
+async def main():
+    
+    hl = Hyperliquid(HYPERLIQUID_SECRET_KEY, HYPERLIQUID_ACCOUNT_ADDRESS)
+
+  
+asyncio.run(main())
 
 def setup(base_url=None, skip_ws=False, perp_dexs=None):
     config_path = os.path.join(os.path.dirname(__file__), "config.json")
@@ -40,25 +56,25 @@ def setup(base_url=None, skip_ws=False, perp_dexs=None):
     return address, info, exchange
 
 
-def get_secret_key(config):
-    if config["secret_key"]:
-        secret_key = config["secret_key"]
-    else:
-        keystore_path = config["keystore_path"]
-        keystore_path = os.path.expanduser(keystore_path)
-        if not os.path.isabs(keystore_path):
-            keystore_path = os.path.join(os.path.dirname(__file__), keystore_path)
-        if not os.path.exists(keystore_path):
-            raise FileNotFoundError(f"Keystore file not found: {keystore_path}")
-        if not os.path.isfile(keystore_path):
-            raise ValueError(f"Keystore path is not a file: {keystore_path}")
-        with open(keystore_path) as f:
-            keystore = json.load(f)
-        password = getpass.getpass("Enter keystore password: ")
-        secret_key = eth_account.Account.decrypt(keystore, password)
-    return secret_key
+# def get_secret_key(config):
+#     if config["secret_key"]:
+#         secret_key = config["secret_key"]
+#     else:
+#         keystore_path = config["keystore_path"]
+#         keystore_path = os.path.expanduser(keystore_path)
+#         if not os.path.isabs(keystore_path):
+#             keystore_path = os.path.join(os.path.dirname(__file__), keystore_path)
+#         if not os.path.exists(keystore_path):
+#             raise FileNotFoundError(f"Keystore file not found: {keystore_path}")
+#         if not os.path.isfile(keystore_path):
+#             raise ValueError(f"Keystore path is not a file: {keystore_path}")
+#         with open(keystore_path) as f:
+#             keystore = json.load(f)
+#         password = getpass.getpass("Enter keystore password: ")
+#         secret_key = eth_account.Account.decrypt(keystore, password)
+#     return secret_key
 
 
-address, info, exchange = setup()
+# address, info, exchange = setup()
 
-print(address, info, exchange)
+# print(address, info, exchange)
