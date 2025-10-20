@@ -8,14 +8,14 @@ from eth_account import Account
 from eth_account.signers.local import LocalAccount
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from config.constants import (
+from src.config.constants import (
   HYPERLIQUID_API_URL,
   HYPERLIQUID_FEE_TAKER,
   HYPERLIQUID_WS_URL,
   MAX_RETRIES,
 )
-from config.settings import settings
-from core.models import (
+from src.config.settings import settings
+from src.core.models import (
   Balance,
   ExchangeName,
   FundingRate,
@@ -23,7 +23,7 @@ from core.models import (
   OrderbookLevel,
   PositionSnapshot,
 )
-from utils.logging import get_logger
+from src.utils.logging import get_logger
 
 
 log = get_logger(__name__)
@@ -464,8 +464,14 @@ class HyperliquidExchange:
       )
       response.raise_for_status()
       return response.json()
+    except httpx.TimeoutException as e:
+      log.warning("hyperliquid_post_timeout", endpoint=endpoint, error=str(e))
+      return None
+    except httpx.HTTPStatusError as e:
+      log.warning("hyperliquid_post_http_error", endpoint=endpoint, status=e.response.status_code, error=str(e))
+      return None
     except Exception as e:
-      log.debug("hyperliquid_post_error", error=str(e))
+      log.warning("hyperliquid_post_error", endpoint=endpoint, error=str(e))
       return None
   
   
@@ -499,6 +505,12 @@ class HyperliquidExchange:
       )
       response.raise_for_status()
       return response.json()
+    except httpx.TimeoutException as e:
+      log.warning("hyperliquid_signed_post_timeout", endpoint=endpoint, error=str(e))
+      return None
+    except httpx.HTTPStatusError as e:
+      log.warning("hyperliquid_signed_post_http_error", endpoint=endpoint, status=e.response.status_code, error=str(e))
+      return None
     except Exception as e:
-      log.debug("hyperliquid_signed_post_error", error=str(e))
+      log.warning("hyperliquid_signed_post_error", endpoint=endpoint, error=str(e))
       return None
