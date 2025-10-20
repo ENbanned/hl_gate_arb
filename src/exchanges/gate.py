@@ -7,14 +7,14 @@ import websockets
 from gate_api.exceptions import ApiException, GateApiException
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from config.constants import (
+from src.config.constants import (
   GATE_API_URL,
   GATE_FEE_TAKER,
   GATE_WS_URL,
   MAX_RETRIES,
 )
-from config.settings import settings
-from core.models import (
+from src.config.settings import settings
+from src.core.models import (
   Balance,
   ExchangeName,
   FundingRate,
@@ -22,7 +22,7 @@ from core.models import (
   OrderbookLevel,
   PositionSnapshot,
 )
-from utils.logging import get_logger
+from src.utils.logging import get_logger
 
 
 log = get_logger(__name__)

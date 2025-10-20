@@ -1,9 +1,9 @@
 from datetime import datetime, timedelta
 
-from config.settings import settings
-from core.models import Position, PositionStatus
-from core.spread import SpreadCalculator
-from utils.logging import get_logger
+from src.config.settings import settings
+from src.core.models import Position, PositionStatus
+from src.core.spread import SpreadCalculator
+from src.utils.logging import get_logger
 
 
 log = get_logger(__name__)

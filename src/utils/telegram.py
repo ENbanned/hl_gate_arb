@@ -3,8 +3,8 @@ from datetime import datetime
 
 import httpx
 
-from config.settings import settings
-from utils.logging import get_logger
+from src.config.settings import settings
+from src.utils.logging import get_logger
 
 
 log = get_logger(__name__)

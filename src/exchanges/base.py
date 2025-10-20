@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from core.models import Balance, FundingRate, Orderbook, PositionSnapshot
+from src.core.models import Balance, FundingRate, Orderbook, PositionSnapshot
 
 
 class ExchangeProtocol(Protocol):

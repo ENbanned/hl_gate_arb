@@ -2,15 +2,15 @@ import asyncio
 import secrets
 from datetime import datetime
 
-from core.models import (
+from src.core.models import (
   ExchangeName,
   Position,
   PositionStatus,
   Spread,
 )
-from exchanges.base import ExchangeProtocol
-from utils.logging import get_logger
-from utils.telegram import notifier
+from src.exchanges.base import ExchangeProtocol
+from src.utils.logging import get_logger
+from src.utils.telegram import notifier
 
 
 log = get_logger(__name__)

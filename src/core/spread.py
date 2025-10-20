@@ -1,11 +1,11 @@
-from config.constants import (
+from src.config.constants import (
   GATE_FEE_TAKER,
   HYPERLIQUID_FEE_TAKER,
 )
-from config.settings import settings
-from core.models import ExchangeName, Spread
-from exchanges.base import ExchangeProtocol
-from utils.logging import get_logger
+from src.config.settings import settings
+from src.core.models import ExchangeName, Spread
+from src.exchanges.base import ExchangeProtocol
+from src.utils.logging import get_logger
 
 
 log = get_logger(__name__)

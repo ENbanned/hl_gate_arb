@@ -1,13 +1,13 @@
 import asyncio
 from datetime import datetime
 
-from config.settings import settings
-from core.position import PositionManager
-from core.risk import RiskManager
-from core.spread import SpreadCalculator
-from exchanges.base import ExchangeProtocol
-from utils.logging import get_logger
-from utils.telegram import notifier
+from src.config.settings import settings
+from src.core.position import PositionManager
+from src.core.risk import RiskManager
+from src.core.spread import SpreadCalculator
+from src.exchanges.base import ExchangeProtocol
+from src.utils.logging import get_logger
+from src.utils.telegram import notifier
 
 
 log = get_logger(__name__)
