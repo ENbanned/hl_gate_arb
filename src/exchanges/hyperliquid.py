@@ -8,14 +8,14 @@ from eth_account import Account
 from eth_account.signers.local import LocalAccount
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from src.config.constants import (
+from config.constants import (
   HYPERLIQUID_API_URL,
   HYPERLIQUID_FEE_TAKER,
   HYPERLIQUID_WS_URL,
   MAX_RETRIES,
 )
-from src.config.settings import settings
-from src.core.models import (
+from config.settings import settings
+from core.models import (
   Balance,
   ExchangeName,
   FundingRate,
@@ -23,7 +23,7 @@ from src.core.models import (
   OrderbookLevel,
   PositionSnapshot,
 )
-from src.utils.logging import get_logger
+from utils.logging import get_logger
 
 
 log = get_logger(__name__)
@@ -37,7 +37,8 @@ class HyperliquidExchange:
     self.wallet: LocalAccount = Account.from_key(
       settings.hyperliquid_private_key
     )
-    self.address = self.wallet.address
+    self.agent_address = self.wallet.address
+    self.address = settings.hyperliquid_account_address
     
     self.client = httpx.AsyncClient(timeout=30.0)
     
@@ -57,7 +58,8 @@ class HyperliquidExchange:
     self.ws_task = asyncio.create_task(self._ws_handler())
     log.info(
       "hyperliquid_connected",
-      address=self.address,
+      account_address=self.address,
+      agent_address=self.agent_address,
       coins=len(self.coin_to_index),
     )
   
@@ -471,10 +473,12 @@ class HyperliquidExchange:
     try:
       timestamp = int(datetime.now().timestamp() * 1000)
       
+      vault_address = self.address if self.address.lower() != self.agent_address.lower() else None
+      
       message = {
         "action": action,
         "nonce": timestamp,
-        "vaultAddress": None,
+        "vaultAddress": vault_address,
       }
       
       message_str = json.dumps(message, separators=(",", ":"))
@@ -486,7 +490,7 @@ class HyperliquidExchange:
         "action": action,
         "nonce": timestamp,
         "signature": signature,
-        "vaultAddress": None,
+        "vaultAddress": vault_address,
       }
       
       response = await self.client.post(

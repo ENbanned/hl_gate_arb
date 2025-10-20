@@ -16,6 +16,7 @@ class Settings(BaseSettings):
   gate_api_secret: str
   
   hyperliquid_private_key: str
+  hyperliquid_account_address: str
   
   telegram_bot_token: str
   telegram_chat_id: str

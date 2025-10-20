@@ -264,32 +264,35 @@ class GateExchange:
     
     try:
       loop = asyncio.get_event_loop()
-      position = await loop.run_in_executor(
+      positions = await loop.run_in_executor(
         None,
-        lambda: self.futures_api.get_position("usdt", contract),
+        lambda: self.futures_api.get_dual_mode_position("usdt", contract),
       )
       
-      if not position:
+      if not positions:
         return None
       
-      size = float(position.size)
-      if size == 0:
-        return None
-      
-      side = "long" if size > 0 else "short"
-      
-      return PositionSnapshot(
-        exchange=self.name,
-        coin=coin,
-        size=abs(size),
-        side=side,
-        entry_price=float(position.entry_price),
-        mark_price=float(position.mark_price),
-        unrealized_pnl=float(position.unrealised_pnl),
-        margin_used=float(position.margin),
-      )
+      for position in positions:
+        size = float(position.size)
+        if size == 0:
+          continue
+        
+        side = "long" if size > 0 else "short"
+        
+        return PositionSnapshot(
+          exchange=self.name,
+          coin=coin,
+          size=abs(size),
+          side=side,
+          entry_price=float(position.entry_price),
+          mark_price=float(position.mark_price),
+          unrealized_pnl=float(position.unrealised_pnl),
+          margin_used=float(position.margin),
+        )
     except (ApiException, GateApiException):
       return None
+    
+    return None
   
   
   async def get_all_positions(self) -> list[PositionSnapshot]:
@@ -357,11 +360,16 @@ class GateExchange:
       loop = asyncio.get_event_loop()
       await loop.run_in_executor(
         None,
-        lambda: self.futures_api.update_dual_mode("usdt", True),
+        lambda: self.futures_api.set_dual_mode("usdt", True),
       )
       log.info("gate_dual_mode_enabled")
     except (ApiException, GateApiException) as e:
-      if "already" not in str(e).lower():
+      error_msg = str(e).lower()
+      if "no holdings" in error_msg or "no pending" in error_msg:
+        log.warning("gate_dual_mode_has_positions", note="Close all positions first to enable dual mode")
+      elif "already" in error_msg or "dual" in error_msg:
+        log.info("gate_dual_mode_already_enabled")
+      else:
         log.warning("gate_dual_mode_error", error=str(e))
   
   
@@ -370,7 +378,7 @@ class GateExchange:
       loop = asyncio.get_event_loop()
       await loop.run_in_executor(
         None,
-        lambda: self.futures_api.update_position_leverage(
+        lambda: self.futures_api.update_dual_mode_position_leverage(
           "usdt",
           contract,
           leverage=str(leverage),
