@@ -15,13 +15,21 @@ class Hyperliquid:
         self.info = Info(base_url=base_url, skip_ws=skip_ws)
         self.exchange = Exchange(account, base_url, account_address=self.account_address)
 
-    def test(self):
-        return self.info.all_mids()
+    def buy_market(self):
+        print(self.exchange.market_open(name='ENA', is_buy=True, sz=100))
+        # {'status': 'ok', 'response': {'type': 'order', 'data': {'statuses': [{'filled': {'totalSz': '100.0', 'avgPx': '0.45189', 'oid': 207485620565}}]}}}
+
+    def sell_market(self):
+        print(self.exchange.market_open(name='ENA', is_buy=False, sz=100))
+        # {'status': 'ok', 'response': {'type': 'order', 'data': {'statuses': [{'filled': {'totalSz': '100.0', 'avgPx': '0.4517', 'oid': 207486667140}}]}}}
+
+    def get_positions(self):
+        print(self.exchange)
 
 
 async def main():
     hl = Hyperliquid(HYPERLIQUID_SECRET_KEY, HYPERLIQUID_ACCOUNT_ADDRESS)
-    print(hl.test())
+    print(hl.sell_market())
 
 
 asyncio.run(main())
