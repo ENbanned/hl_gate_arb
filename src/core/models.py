@@ -1,17 +1,8 @@
-from dataclasses import dataclass
-from datetime import datetime, UTC
+from datetime import datetime
 from enum import Enum
+from typing import Literal
 
-
-class PositionSide(str, Enum):
-  LONG = "long"
-  SHORT = "short"
-
-
-class PositionStatus(str, Enum):
-  OPEN = "open"
-  CLOSED = "closed"
-  FAILED = "failed"
+from pydantic import BaseModel, Field
 
 
 class ExchangeName(str, Enum):
@@ -19,28 +10,41 @@ class ExchangeName(str, Enum):
   HYPERLIQUID = "hyperliquid"
 
 
-@dataclass
-class Balance:
-  exchange: ExchangeName
-  account_value: float
+class PositionStatus(str, Enum):
+  OPENING = "opening"
+  ACTIVE = "active"
+  CLOSING = "closing"
+  CLOSED = "closed"
+  FAILED = "failed"
+
+
+class Balance(BaseModel):
+  total: float
   available: float
-  total_margin_used: float
-  unrealised_pnl: float
+  in_positions: float
+  timestamp: datetime = Field(default_factory=datetime.now)
 
 
-@dataclass
-class FundingRate:
-  exchange: ExchangeName
-  coin: str
+class OrderbookLevel(BaseModel):
+  price: float
+  size: float
+
+
+class Orderbook(BaseModel):
+  bids: list[OrderbookLevel]
+  asks: list[OrderbookLevel]
+  timestamp: datetime = Field(default_factory=datetime.now)
+
+
+class FundingRate(BaseModel):
   rate: float
-  timestamp: datetime
-  next_funding_time: datetime | None = None
+  next_funding_time: datetime
+  timestamp: datetime = Field(default_factory=datetime.now)
 
 
-@dataclass
-class Spread:
+class Spread(BaseModel):
   coin: str
-  direction: str
+  direction: Literal["gate_to_hl", "hl_to_gate"]
   
   buy_exchange: ExchangeName
   sell_exchange: ExchangeName
@@ -48,88 +52,56 @@ class Spread:
   buy_price: float
   sell_price: float
   
-  buy_slippage_pct: float
-  sell_slippage_pct: float
-  
   gross_spread_pct: float
+  funding_cost_pct: float
   net_spread_pct: float
   
-  estimated_cost: float
-  estimated_revenue: float
-  estimated_profit: float
-  
-  buy_funding_rate: float
-  sell_funding_rate: float
-  funding_cost_pct: float
-  
+  size_usd: float
   leverage: int
-  position_size_usd: float
+  
+  estimated_profit_usd: float
+  
+  timestamp: datetime = Field(default_factory=datetime.now)
 
 
-@dataclass
-class OrderResult:
-  exchange: ExchangeName
-  coin: str
-  side: PositionSide
-  size: float
-  executed_price: float | None
-  success: bool
-  error: str | None = None
-  order_id: str | None = None
-
-
-@dataclass
-class Position:
+class Position(BaseModel):
   id: str
   coin: str
+  direction: Literal["gate_to_hl", "hl_to_gate"]
   
   buy_exchange: ExchangeName
   sell_exchange: ExchangeName
   
-  buy_order: OrderResult
-  sell_order: OrderResult
-  
-  entry_spread: float
-  expected_profit: float
-  
-  buy_funding_rate: float
-  sell_funding_rate: float
-  estimated_funding_cost: float
-  accumulated_funding_cost: float
-  
-  leverage: int
   size_usd: float
+  leverage: int
   
-  opened_at: datetime
-  closed_at: datetime | None
+  entry_spread_pct: float
+  entry_buy_price: float
+  entry_sell_price: float
+  
+  expected_profit_usd: float
+  
+  buy_order_id: str | None = None
+  sell_order_id: str | None = None
   
   status: PositionStatus
   
-  realized_pnl: float = 0.0
-  stop_loss_triggered: bool = False
-  time_limit_triggered: bool = False
+  opened_at: datetime = Field(default_factory=datetime.now)
+  closed_at: datetime | None = None
   
+  current_spread_pct: float | None = None
+  realized_pnl_usd: float = 0.0
+  funding_cost_usd: float = 0.0
   
-  def is_expired(self, max_minutes: int) -> bool:
-    if self.closed_at:
-      return False
-    elapsed = (datetime.now(UTC) - self.opened_at).total_seconds() / 60
-    return elapsed >= max_minutes
-  
-  
-  def get_duration_minutes(self) -> float:
-    end_time = self.closed_at or datetime.now(UTC)
-    return (end_time - self.opened_at).total_seconds() / 60
-  
-  
-  def update_funding_cost(self, gate_rate: float, hl_rate: float):
-    duration_hours = self.get_duration_minutes() / 60
-    
-    if self.buy_exchange == ExchangeName.GATE:
-      gate_cost = gate_rate * (duration_hours / 8)
-      hl_cost = -hl_rate * duration_hours
-    else:
-      hl_cost = hl_rate * duration_hours
-      gate_cost = -gate_rate * (duration_hours / 8)
-    
-    self.accumulated_funding_cost = (gate_cost + hl_cost) * self.size_usd * self.leverage
+  close_reason: str | None = None
+
+
+class PositionSnapshot(BaseModel):
+  exchange: ExchangeName
+  coin: str
+  size: float
+  side: Literal["long", "short"]
+  entry_price: float
+  mark_price: float
+  unrealized_pnl: float
+  margin_used: float

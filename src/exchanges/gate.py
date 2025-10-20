@@ -1,12 +1,28 @@
 import asyncio
-from datetime import datetime, UTC
+import json
+from datetime import datetime, timedelta
 
 import gate_api
-from gate_api import ApiClient, Configuration, FuturesApi, FuturesOrder
+import websockets
+from gate_api.exceptions import ApiException, GateApiException
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from src.core.models import Balance, ExchangeName, OrderResult, PositionSide
-from src.utils.logging import get_logger
+from config.constants import (
+  GATE_API_URL,
+  GATE_FEE_TAKER,
+  GATE_WS_URL,
+  MAX_RETRIES,
+)
+from config.settings import settings
+from core.models import (
+  Balance,
+  ExchangeName,
+  FundingRate,
+  Orderbook,
+  OrderbookLevel,
+  PositionSnapshot,
+)
+from utils.logging import get_logger
 
 
 log = get_logger(__name__)
@@ -14,403 +30,421 @@ log = get_logger(__name__)
 
 class GateExchange:
   
-  def __init__(self, api_key: str, api_secret: str, settle: str = "usdt"):
+  def __init__(self):
     self.name = ExchangeName.GATE
-    self.settle = settle
     
-    config = Configuration(
-      host="https://api.gateio.ws/api/v4",
-      key=api_key,
-      secret=api_secret
+    config = gate_api.Configuration(
+      host=GATE_API_URL,
+      key=settings.gate_api_key,
+      secret=settings.gate_api_secret,
     )
+    self.api_client = gate_api.ApiClient(config)
+    self.futures_api = gate_api.FuturesApi(self.api_client)
     
-    client = ApiClient(config)
-    self.api = FuturesApi(client)
+    self.ws: websockets.WebSocketClientProtocol | None = None
+    self.orderbooks: dict[str, Orderbook] = {}
+    self.funding_rates: dict[str, FundingRate] = {}
+    self.contracts: dict[str, dict] = {}
     
-    self.orderbooks: dict[str, dict] = {}
-    self._coins: list[str] = []
-    self._contracts_cache: dict[str, any] = {}
-    self._dual_mode_enabled = False
-
-
-  async def __aenter__(self):
-    contracts = await asyncio.to_thread(self.api.list_futures_contracts, self.settle)
-    
-    for c in contracts:
-      if c.name.endswith("_USDT"):
-        coin = c.name.replace("_USDT", "")
-        self._coins.append(coin)
-        self._contracts_cache[coin] = c
-    
+    self.ws_task: asyncio.Task | None = None
+    self.running = False
+  
+  
+  async def connect(self):
+    await self._load_contracts()
     await self._enable_dual_mode()
-    
-    asyncio.create_task(self._update_orderbooks_loop())
-    log.info("gate_started", coins_count=len(self._coins))
-    return self
-
-
-  async def __aexit__(self, exc_type, exc, tb):
-    pass
-
-
-  async def _enable_dual_mode(self):
-    try:
-      account = await asyncio.to_thread(self.api.list_futures_accounts, self.settle)
-      
-      if not account.in_dual_mode:
-        positions = await asyncio.to_thread(self.api.list_positions, self.settle)
-        
-        if any(float(p.size) != 0 for p in positions):
-          log.error("dual_mode_enable_failed_has_positions")
-          raise RuntimeError("Cannot enable dual mode - close all positions first")
-        
-        await asyncio.to_thread(self.api.set_dual_mode, self.settle, True)
-        self._dual_mode_enabled = True
-        log.info("gate_dual_mode_enabled")
-      else:
-        self._dual_mode_enabled = True
-        log.info("gate_dual_mode_already_enabled")
-    
-    except Exception as e:
-      log.error("dual_mode_enable_error", error=str(e), exc_info=True)
-      raise
-
-
-  async def _update_orderbooks_loop(self):
-    while True:
-      for coin in self._coins:
-        try:
-          contract = f"{coin}_USDT"
-          book = await self._fetch_orderbook(contract)
-          self.orderbooks[coin] = book
-        except Exception as e:
-          log.debug("gate_orderbook_fetch_failed", coin=coin, error=str(e))
-          continue
-      
-      await asyncio.sleep(0.5)
-
-
-  async def _fetch_orderbook(self, contract: str) -> dict:
-    book = await asyncio.to_thread(
-      self.api.list_futures_order_book,
-      self.settle,
-      contract,
-      limit=50
-    )
-    
-    bids = [{"px": item.p, "sz": item.s} for item in book.bids]
-    asks = [{"px": item.p, "sz": item.s} for item in book.asks]
-    
-    return {
-      "levels": [bids, asks],
-      "timestamp": datetime.now(UTC)
-    }
-
-
-  async def get_balance(self) -> Balance:
-    account = await asyncio.to_thread(
-      self.api.list_futures_accounts,
-      self.settle
-    )
-    
-    return Balance(
-      exchange=self.name,
-      account_value=float(account.total or 0),
-      available=float(account.available or 0),
-      total_margin_used=float(account.position_margin or 0) + float(account.order_margin or 0),
-      unrealised_pnl=float(account.unrealised_pnl or 0)
-    )
-
-
-  async def get_orderbook(self, coin: str) -> dict:
-    return self.orderbooks.get(coin, {})
-
-
-  async def get_leverage_limits(self, coin: str) -> tuple[int, int]:
-    contract = self._contracts_cache.get(coin)
-    if contract:
-      return (int(contract.leverage_min), int(contract.leverage_max))
-    return (1, 1)
-
-
-  async def get_funding_rate(self, coin: str) -> float:
-    try:
-      contract = f"{coin}_USDT"
-      tickers = await asyncio.to_thread(self.api.list_futures_tickers, self.settle, contract=contract)
-      if tickers and len(tickers) > 0:
-        return float(tickers[0].funding_rate or 0.0)
-    except Exception as e:
-      log.debug("gate_funding_rate_error", coin=coin, error=str(e))
-    return 0.0
-
-
-  def calculate_slippage(self, coin: str, amount_usd: float, is_buy: bool) -> float:
-    if coin not in self.orderbooks or not self.orderbooks[coin]:
-      return 0.0
-    
-    book = self.orderbooks[coin]
-    levels = book["levels"][1 if is_buy else 0]
-    
-    if not levels:
-      return 0.0
-    
-    best_price = float(levels[0]["px"])
-    remaining = amount_usd
-    total_cost = 0.0
-    total_size = 0.0
-    
-    for level in levels:
-      price = float(level["px"])
-      size = float(level["sz"])
-      
-      level_usd = price * size
-      if remaining >= level_usd:
-        total_cost += level_usd
-        total_size += size
-        remaining -= level_usd
-      else:
-        partial_size = remaining / price
-        total_cost += remaining
-        total_size += partial_size
-        remaining = 0
-      
-      if remaining <= 0:
-        break
-    
-    if total_size == 0:
-      return 0.0
-    
-    avg_price = total_cost / total_size
-    slippage_pct = abs((avg_price - best_price) / best_price) * 100
-    
-    return slippage_pct
-
-
-  async def get_open_positions(self) -> list[dict]:
-    try:
-      positions = await asyncio.to_thread(self.api.list_positions, self.settle)
-      
-      result = []
-      for pos in positions:
-        if pos.size != 0:
-          coin = pos.contract.replace("_USDT", "")
-          side = PositionSide.LONG if pos.size > 0 else PositionSide.SHORT
-          
-          result.append({
-            "coin": coin,
-            "side": side,
-            "size": abs(pos.size),
-            "contract": pos.contract,
-            "mode": pos.mode,
-            "entry_price": float(pos.entry_price),
-            "unrealised_pnl": float(pos.unrealised_pnl)
-          })
-      
-      return result
-    
-    except Exception as e:
-      log.error("get_open_positions_failed", error=str(e))
-      return []
-
-
+    self.running = True
+    self.ws_task = asyncio.create_task(self._ws_handler())
+    log.info("gate_connected", contracts=len(self.contracts))
+  
+  
+  async def disconnect(self):
+    self.running = False
+    if self.ws:
+      await self.ws.close()
+    if self.ws_task:
+      self.ws_task.cancel()
+      try:
+        await self.ws_task
+      except asyncio.CancelledError:
+        pass
+    log.info("gate_disconnected")
+  
+  
   @retry(
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=2, max=10),
-    reraise=True
+    stop=stop_after_attempt(MAX_RETRIES),
+    wait=wait_exponential(multiplier=1, min=1, max=10),
+  )
+  async def get_balance(self) -> Balance:
+    try:
+      loop = asyncio.get_event_loop()
+      account = await loop.run_in_executor(
+        None,
+        lambda: self.futures_api.list_futures_accounts("usdt"),
+      )
+      
+      total = float(account.total)
+      available = float(account.available)
+      in_positions = total - available
+      
+      return Balance(
+        total=total,
+        available=available,
+        in_positions=in_positions,
+      )
+    except (ApiException, GateApiException) as e:
+      log.error("gate_balance_error", error=str(e))
+      raise
+  
+  
+  async def get_orderbook(self, coin: str) -> Orderbook | None:
+    contract = self._get_contract_name(coin)
+    if not contract:
+      return None
+    return self.orderbooks.get(contract)
+  
+  
+  async def get_funding_rate(self, coin: str) -> FundingRate | None:
+    contract = self._get_contract_name(coin)
+    if not contract:
+      return None
+    
+    cached = self.funding_rates.get(contract)
+    if cached and (datetime.now() - cached.timestamp).seconds < 300:
+      return cached
+    
+    try:
+      loop = asyncio.get_event_loop()
+      ticker = await loop.run_in_executor(
+        None,
+        lambda: self.futures_api.list_futures_tickers("usdt", contract=contract),
+      )
+      
+      if ticker:
+        t = ticker[0]
+        rate = float(t.funding_rate)
+        next_time = datetime.fromtimestamp(t.funding_next_apply)
+        
+        funding = FundingRate(
+          rate=rate,
+          next_funding_time=next_time,
+        )
+        self.funding_rates[contract] = funding
+        return funding
+    except Exception as e:
+      log.debug("gate_funding_error", coin=coin, error=str(e))
+    
+    return None
+  
+  
+  async def get_leverage_limits(self, coin: str) -> tuple[int, int]:
+    contract = self._get_contract_name(coin)
+    if not contract or contract not in self.contracts:
+      return (1, 1)
+    
+    c = self.contracts[contract]
+    leverage_min = int(c.get("leverage_min", 1))
+    leverage_max = int(c.get("leverage_max", 10))
+    
+    return (leverage_min, leverage_max)
+  
+  
+  @retry(
+    stop=stop_after_attempt(MAX_RETRIES),
+    wait=wait_exponential(multiplier=1, min=1, max=10),
   )
   async def open_position(
-    self, 
-    coin: str, 
-    side: PositionSide, 
-    size_usd: float, 
-    leverage: int
-  ) -> OrderResult:
+    self,
+    coin: str,
+    side: str,
+    size_usd: float,
+    leverage: int,
+  ) -> str | None:
+    contract = self._get_contract_name(coin)
+    if not contract:
+      return None
+    
     try:
-      contract = f"{coin}_USDT"
+      await self._set_leverage(contract, leverage)
       
-      await asyncio.to_thread(
-        self.api.update_dual_mode_position_leverage,
-        self.settle,
-        contract,
-        str(leverage)
+      orderbook = await self.get_orderbook(coin)
+      if not orderbook:
+        return None
+      
+      if side == "long":
+        price = orderbook.asks[0].price * 1.001
+      else:
+        price = orderbook.bids[0].price * 0.999
+      
+      size = int(size_usd / price)
+      if size <= 0:
+        return None
+      
+      order = gate_api.FuturesOrder(
+        contract=contract,
+        size=size if side == "long" else -size,
+        price=str(price),
+        tif="ioc",
       )
       
-      book = self.orderbooks.get(coin)
-      if not book:
-        return OrderResult(
-          exchange=self.name,
+      loop = asyncio.get_event_loop()
+      result = await loop.run_in_executor(
+        None,
+        lambda: self.futures_api.create_futures_order("usdt", order),
+      )
+      
+      if result and result.id:
+        log.info(
+          "gate_order_placed",
           coin=coin,
           side=side,
-          size=0,
-          executed_price=None,
-          success=False,
-          error="orderbook_not_available"
+          size=size,
+          price=price,
+          order_id=result.id,
         )
-      
-      price = float(book["levels"][1 if side == PositionSide.LONG else 0][0]["px"])
-      size_contracts = int((size_usd * leverage) / price)
-      
-      if size_contracts < 1:
-        size_contracts = 1
-      
-      order = FuturesOrder(
-        contract=contract,
-        size=size_contracts if side == PositionSide.LONG else -size_contracts,
-        price="0",
-        tif="ioc"
-      )
-      
-      result = await asyncio.to_thread(
-        self.api.create_futures_order,
-        self.settle,
-        order
-      )
-      
-      log.debug(
-        "gate_position_opened",
-        coin=coin,
-        side=side.value,
-        size_contracts=size_contracts,
-        leverage=leverage
-      )
-      
-      return OrderResult(
-        exchange=self.name,
-        coin=coin,
-        side=side,
-        size=size_contracts,
-        executed_price=float(result.fill_price) if hasattr(result, "fill_price") and result.fill_price else price,
-        success=True,
-        order_id=str(result.id)
-      )
+        return str(result.id)
+    except (ApiException, GateApiException) as e:
+      log.error("gate_order_error", coin=coin, error=str(e))
     
-    except Exception as e:
-      log.error("gate_open_position_failed", coin=coin, side=side.value, error=str(e))
-      return OrderResult(
-        exchange=self.name,
-        coin=coin,
-        side=side,
-        size=0,
-        executed_price=None,
-        success=False,
-        error=str(e)
-      )
-
-
-  async def close_position(self, coin: str, side: PositionSide) -> OrderResult:
+    return None
+  
+  
+  @retry(
+    stop=stop_after_attempt(MAX_RETRIES),
+    wait=wait_exponential(multiplier=1, min=1, max=10),
+  )
+  async def close_position(self, coin: str) -> bool:
+    contract = self._get_contract_name(coin)
+    if not contract:
+      return False
+    
     try:
-      contract = f"{coin}_USDT"
-      auto_size_value = "close_long" if side == PositionSide.LONG else "close_short"
+      position = await self.get_position(coin)
+      if not position or position.size == 0:
+        return True
       
-      order = FuturesOrder(
+      orderbook = await self.get_orderbook(coin)
+      if not orderbook:
+        return False
+      
+      if position.side == "long":
+        price = orderbook.bids[0].price * 0.999
+        size = -abs(int(position.size))
+      else:
+        price = orderbook.asks[0].price * 1.001
+        size = abs(int(position.size))
+      
+      order = gate_api.FuturesOrder(
         contract=contract,
-        size=0,
-        auto_size=auto_size_value,
+        size=size,
+        price=str(price),
+        tif="ioc",
         reduce_only=True,
-        close=False,
-        price="0",
-        tif="ioc"
       )
       
-      result = await asyncio.to_thread(
-        self.api.create_futures_order,
-        self.settle,
-        order
+      loop = asyncio.get_event_loop()
+      result = await loop.run_in_executor(
+        None,
+        lambda: self.futures_api.create_futures_order("usdt", order),
       )
       
-      log.debug("gate_position_closed", coin=coin, side=side.value)
-      
-      return OrderResult(
-        exchange=self.name,
-        coin=coin,
-        side=side,
-        size=0,
-        executed_price=float(result.fill_price) if hasattr(result, "fill_price") and result.fill_price else None,
-        success=True,
-        order_id=str(result.id)
-      )
+      if result:
+        log.info("gate_position_closed", coin=coin, order_id=result.id)
+        return True
+    except (ApiException, GateApiException) as e:
+      log.error("gate_close_error", coin=coin, error=str(e))
     
-    except Exception as e:
-      log.error("gate_close_position_failed_auto_size", coin=coin, side=side.value, error=str(e))
-      
-      fallback_result = await self._close_position_fallback(coin, side)
-      if fallback_result.success:
-        return fallback_result
-      
-      return OrderResult(
-        exchange=self.name,
-        coin=coin,
-        side=side,
-        size=0,
-        executed_price=None,
-        success=False,
-        error=str(e)
-      )
-
-
-  async def _close_position_fallback(self, coin: str, side: PositionSide) -> OrderResult:
+    return False
+  
+  
+  async def get_position(self, coin: str) -> PositionSnapshot | None:
+    contract = self._get_contract_name(coin)
+    if not contract:
+      return None
+    
     try:
-      log.info("gate_attempting_fallback_close", coin=coin, side=side.value)
-      
-      contract = f"{coin}_USDT"
-      positions = await asyncio.to_thread(self.api.list_positions, self.settle)
-      
-      position = None
-      for pos in positions:
-        if pos.contract == contract and pos.size != 0:
-          pos_side = PositionSide.LONG if pos.size > 0 else PositionSide.SHORT
-          if pos_side == side:
-            position = pos
-            break
+      loop = asyncio.get_event_loop()
+      position = await loop.run_in_executor(
+        None,
+        lambda: self.futures_api.get_position("usdt", contract),
+      )
       
       if not position:
-        log.warning("gate_fallback_no_position", coin=coin, side=side.value)
-        return OrderResult(
-          exchange=self.name,
-          coin=coin,
-          side=side,
-          size=0,
-          executed_price=None,
-          success=False,
-          error="position_not_found_in_fallback"
+        return None
+      
+      size = float(position.size)
+      if size == 0:
+        return None
+      
+      side = "long" if size > 0 else "short"
+      
+      return PositionSnapshot(
+        exchange=self.name,
+        coin=coin,
+        size=abs(size),
+        side=side,
+        entry_price=float(position.entry_price),
+        mark_price=float(position.mark_price),
+        unrealized_pnl=float(position.unrealised_pnl),
+        margin_used=float(position.margin),
+      )
+    except (ApiException, GateApiException):
+      return None
+  
+  
+  async def get_all_positions(self) -> list[PositionSnapshot]:
+    try:
+      loop = asyncio.get_event_loop()
+      positions = await loop.run_in_executor(
+        None,
+        lambda: self.futures_api.list_positions("usdt"),
+      )
+      
+      result = []
+      for p in positions:
+        size = float(p.size)
+        if size == 0:
+          continue
+        
+        coin = self._contract_to_coin(p.contract)
+        if not coin:
+          continue
+        
+        side = "long" if size > 0 else "short"
+        
+        result.append(
+          PositionSnapshot(
+            exchange=self.name,
+            coin=coin,
+            size=abs(size),
+            side=side,
+            entry_price=float(p.entry_price),
+            mark_price=float(p.mark_price),
+            unrealized_pnl=float(p.unrealised_pnl),
+            margin_used=float(p.margin),
+          )
         )
       
-      close_size = -int(position.size)
-      
-      order = FuturesOrder(
-        contract=contract,
-        size=close_size,
-        reduce_only=True,
-        price="0",
-        tif="ioc"
+      return result
+    except (ApiException, GateApiException):
+      return []
+  
+  
+  async def _load_contracts(self):
+    try:
+      loop = asyncio.get_event_loop()
+      contracts = await loop.run_in_executor(
+        None,
+        lambda: self.futures_api.list_futures_contracts("usdt"),
       )
       
-      result = await asyncio.to_thread(
-        self.api.create_futures_order,
-        self.settle,
-        order
-      )
+      for c in contracts:
+        self.contracts[c.name] = {
+          "name": c.name,
+          "leverage_min": c.leverage_min,
+          "leverage_max": c.leverage_max,
+          "order_size_min": c.order_size_min,
+        }
       
-      log.info("gate_fallback_close_success", coin=coin, side=side.value, close_size=close_size)
-      
-      return OrderResult(
-        exchange=self.name,
-        coin=coin,
-        side=side,
-        size=abs(close_size),
-        executed_price=float(result.fill_price) if hasattr(result, "fill_price") and result.fill_price else None,
-        success=True,
-        order_id=str(result.id)
+      log.info("gate_contracts_loaded", count=len(self.contracts))
+    except (ApiException, GateApiException) as e:
+      log.error("gate_contracts_error", error=str(e))
+      raise
+  
+  
+  async def _enable_dual_mode(self):
+    try:
+      loop = asyncio.get_event_loop()
+      await loop.run_in_executor(
+        None,
+        lambda: self.futures_api.update_dual_mode("usdt", True),
       )
-    
+      log.info("gate_dual_mode_enabled")
+    except (ApiException, GateApiException) as e:
+      if "already" not in str(e).lower():
+        log.warning("gate_dual_mode_error", error=str(e))
+  
+  
+  async def _set_leverage(self, contract: str, leverage: int):
+    try:
+      loop = asyncio.get_event_loop()
+      await loop.run_in_executor(
+        None,
+        lambda: self.futures_api.update_position_leverage(
+          "usdt",
+          contract,
+          leverage=str(leverage),
+        ),
+      )
+    except (ApiException, GateApiException) as e:
+      log.debug("gate_leverage_error", contract=contract, error=str(e))
+  
+  
+  async def _ws_handler(self):
+    while self.running:
+      try:
+        async with websockets.connect(GATE_WS_URL) as ws:
+          self.ws = ws
+          
+          await self._subscribe_orderbooks(ws)
+          
+          async for msg in ws:
+            await self._handle_ws_message(msg)
+      except Exception as e:
+        log.warning("gate_ws_error", error=str(e))
+        await asyncio.sleep(5)
+  
+  
+  async def _subscribe_orderbooks(self, ws: websockets.WebSocketClientProtocol):
+    for contract in list(self.contracts.keys())[:100]:
+      sub_msg = {
+        "time": int(datetime.now().timestamp()),
+        "channel": "futures.order_book_update",
+        "event": "subscribe",
+        "payload": [contract, "100ms", "5"],
+      }
+      await ws.send(json.dumps(sub_msg))
+      await asyncio.sleep(0.01)
+  
+  
+  async def _handle_ws_message(self, message: str):
+    try:
+      data = json.loads(message)
+      
+      if data.get("channel") == "futures.order_book_update":
+        if data.get("event") == "update":
+          await self._process_orderbook_update(data.get("result", {}))
     except Exception as e:
-      log.error("gate_fallback_close_failed", coin=coin, side=side.value, error=str(e))
-      return OrderResult(
-        exchange=self.name,
-        coin=coin,
-        side=side,
-        size=0,
-        executed_price=None,
-        success=False,
-        error=f"fallback_failed: {str(e)}"
-      )
+      log.debug("gate_ws_parse_error", error=str(e))
+  
+  
+  async def _process_orderbook_update(self, result: dict):
+    contract = result.get("c")
+    if not contract:
+      return
+    
+    asks_data = result.get("a", [])
+    bids_data = result.get("b", [])
+    
+    asks = [
+      OrderbookLevel(price=float(a["p"]), size=float(a["s"]))
+      for a in asks_data[:5]
+    ]
+    bids = [
+      OrderbookLevel(price=float(b["p"]), size=float(b["s"]))
+      for b in bids_data[:5]
+    ]
+    
+    if asks and bids:
+      self.orderbooks[contract] = Orderbook(asks=asks, bids=bids)
+  
+  
+  def _get_contract_name(self, coin: str) -> str | None:
+    contract = f"{coin}_USDT"
+    return contract if contract in self.contracts else None
+  
+  
+  def _contract_to_coin(self, contract: str) -> str | None:
+    if contract.endswith("_USDT"):
+      return contract[:-5]
+    return None
