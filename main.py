@@ -9,7 +9,11 @@ from hyperliquid.exchange import Exchange
 from hyperliquid.info import Info
 
 
-
+class Hyperliquid:
+    
+    def __init__(self, secret_key, account_address):
+        
+        
 
 
 def setup(base_url=None, skip_ws=False, perp_dexs=None):
