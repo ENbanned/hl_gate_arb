@@ -1,77 +1,73 @@
 import asyncio
 import signal
+import sys
 
 from src.config.settings import settings
 from src.exchanges.gate import GateExchange
 from src.exchanges.hyperliquid import HyperliquidExchange
 from src.strategy.arbitrage import ArbitrageStrategy
 from src.utils.logging import get_logger, setup_logging
-from src.utils.emergency_shutdown import emergency_close_all
+from src.utils.telegram import notifier
 
 
-setup_logging(log_level="INFO", console_output=True)
+setup_logging(settings.log_level)
 log = get_logger(__name__)
 
 
 class Application:
   
   def __init__(self):
-    self.gate = None
-    self.hyperliquid = None
-    self.strategy = None
+    self.gate = GateExchange()
+    self.hyperliquid = HyperliquidExchange()
+    self.strategy = ArbitrageStrategy(self.gate, self.hyperliquid)
+    
     self.shutdown_event = asyncio.Event()
   
   
-  async def startup(self):
+  async def start(self):
     log.info("application_starting")
     
-    self.gate = GateExchange(
-      settings.gate_api_key,
-      settings.gate_api_secret
-    )
+    signal.signal(signal.SIGINT, self._signal_handler)
+    signal.signal(signal.SIGTERM, self._signal_handler)
     
-    self.hyperliquid = HyperliquidExchange(
-      settings.hyperliquid_private_key,
-      settings.hyperliquid_account_address
-    )
+    try:
+      await self.gate.connect()
+      await self.hyperliquid.connect()
+      
+      log.info("application_started")
+      
+      await notifier.send("🚀 Arbitrage Bot Started")
+      
+      await asyncio.gather(
+        self.strategy.start(),
+        self._wait_for_shutdown(),
+      )
     
-    await self.gate.__aenter__()
-    await self.hyperliquid.__aenter__()
+    except Exception as e:
+      log.error("application_error", error=str(e))
+      await notifier.error_alert("Application Error", str(e))
+      raise
     
-    await asyncio.sleep(5)
-    
-    self.strategy = ArbitrageStrategy(self.gate, self.hyperliquid)
-    
-    log.info("application_started")
+    finally:
+      await self._shutdown()
   
   
-  async def run(self):
-      try:
-        await self.strategy.start()
-      except asyncio.CancelledError:
-        log.debug("application_cancelled")
-      except Exception as e:
-        log.error("application_error", error=str(e), exc_info=True)
-        
-        log.critical("application_critical_error_emergency_shutdown")
-        
-        try:
-          await emergency_close_all(self.gate, self.hyperliquid)
-        except Exception as shutdown_error:
-          log.critical("emergency_shutdown_failed", error=str(shutdown_error), exc_info=True)
+  async def _wait_for_shutdown(self):
+    await self.shutdown_event.wait()
   
   
-  async def shutdown(self):
+  def _signal_handler(self, signum, frame):
+    log.info("shutdown_signal_received", signal=signum)
+    self.shutdown_event.set()
+  
+  
+  async def _shutdown(self):
     log.info("application_shutting_down")
     
-    if self.strategy:
-      await self.strategy.shutdown()
-    
-    if self.gate:
-      await self.gate.__aexit__(None, None, None)
-    
-    if self.hyperliquid:
-      await self.hyperliquid.__aexit__(None, None, None)
+    await self.strategy.stop()
+    await self.gate.disconnect()
+    await self.hyperliquid.disconnect()
+    await notifier.close()
     
     log.info("application_shutdown_complete")
 
@@ -79,31 +75,13 @@ class Application:
 async def main():
   app = Application()
   
-  loop = asyncio.get_event_loop()
-  
-  def signal_handler():
-    log.info("shutdown_signal_received")
-    if app.strategy:
-      app.strategy._shutdown_requested = True
-  
-  for sig in (signal.SIGTERM, signal.SIGINT):
-    loop.add_signal_handler(sig, signal_handler)
-  
   try:
-    await app.startup()
-    await app.run()
+    await app.start()
   except KeyboardInterrupt:
-    log.info("keyboard_interrupt")
+    log.info("keyboard_interrupt_received")
   except Exception as e:
-    log.critical("main_unhandled_exception", error=str(e), exc_info=True)
-    
-    try:
-      log.critical("main_initiating_emergency_shutdown")
-      await emergency_close_all(app.gate, app.hyperliquid)
-    except Exception as shutdown_error:
-      log.critical("main_emergency_shutdown_failed", error=str(shutdown_error), exc_info=True)
-  finally:
-    await app.shutdown()
+    log.critical("fatal_error", error=str(e))
+    sys.exit(1)
 
 
 if __name__ == "__main__":
