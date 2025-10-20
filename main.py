@@ -12,7 +12,7 @@ class Hyperliquid:
         self.account_address = account_address
         
         account: LocalAccount = eth_account.Account.from_key(self.secret_key)
-        self.info = Info(base_url=base_url, skip_ws=skip_ws)
+        self.info = Info(base_url=f'{base_url}/info', skip_ws=skip_ws)
         self.exchange = Exchange(account, base_url, account_address=self.account_address)
 
     def buy_market(self):
@@ -23,13 +23,13 @@ class Hyperliquid:
         print(self.exchange.market_open(name='ENA', is_buy=False, sz=100))
         # {'status': 'ok', 'response': {'type': 'order', 'data': {'statuses': [{'filled': {'totalSz': '100.0', 'avgPx': '0.4517', 'oid': 207486667140}}]}}}
 
-    def get_positions(self):
-        print(self.exchange)
+    def leverage(self):
+        print(self.exchange.update_leverage(2, 'ASTER', False))
 
 
 async def main():
-    hl = Hyperliquid(HYPERLIQUID_SECRET_KEY, HYPERLIQUID_ACCOUNT_ADDRESS)
-    print(hl.sell_market())
+    hl = Hyperliquid(HYPERLIQUID_SECRET_KEY, HYPERLIQUID_ACCOUNT_ADDRESS, base_url='http://localhost:3001')
+    print(hl.leverage())
 
 
 asyncio.run(main())
