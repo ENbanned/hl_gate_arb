@@ -14,7 +14,6 @@ class HyperliquidClient:
     secret_key: str, 
     account_address: str, 
     base_url: str = None, 
-    skip_ws: bool = True,
     meta_update_interval: int = 300
   ):
     self.secret_key = secret_key
@@ -22,19 +21,20 @@ class HyperliquidClient:
     self.meta_update_interval = meta_update_interval
     
     account: LocalAccount = eth_account.Account.from_key(self.secret_key)
-    self.info = Info(base_url=base_url, skip_ws=skip_ws)
+    self.info = Info(base_url=base_url, skip_ws=False)
     self.exchange = Exchange(account, base_url, account_address=self.account_address)
     
     self.assets_meta: dict[str, dict] = {}
     self._update_task = None
     self._shutdown = asyncio.Event()
+    
+    self.price_monitor = HyperliquidPriceMonitor()
 
 
   async def __aenter__(self):
     await self._refresh_meta()
     self._update_task = asyncio.create_task(self._meta_updater())
     
-    self.price_monitor = HyperliquidPriceMonitor()
     self.price_monitor.info = self.info
     await self.price_monitor.start()
 
@@ -80,8 +80,8 @@ class HyperliquidClient:
     return await asyncio.to_thread(self.info.all_mids, dex)
 
 
-  async def get_price(self, coin: str) -> float | None:
-    return await self.price_monitor.get_price(coin)
+  def get_price(self, coin: str) -> float | None:
+    return self.price_monitor.get_price(coin)
 
 
   async def user_fills(self, address: str | None = None):
