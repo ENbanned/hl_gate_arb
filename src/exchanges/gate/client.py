@@ -22,8 +22,8 @@ class GateClient:
     'config',
     'client',
     'futures_api',
-    'contracts_meta',
     'price_monitor',
+    'contracts_meta',
     '_update_task',
     '_shutdown'
   )
@@ -46,46 +46,33 @@ class GateClient:
     self.config = Configuration(host=host, key=api_key, secret=api_secret)
     self.client = ApiClient(self.config)
     self.futures_api = FuturesApi(self.client)
-    self.price_monitor = GatePriceMonitor(settle)
     
+    self.price_monitor = GatePriceMonitor(settle)
     self.contracts_meta: dict[str, Decimal] = {}
     self._update_task = None
     self._shutdown = asyncio.Event()
 
 
   async def __aenter__(self):
-    
     await self._init_setup()
-    
     contracts = list(self.contracts_meta.keys())
     await self.price_monitor.start(contracts)
-    
     return self
 
 
   async def __aexit__(self, exc_type, exc_val, exc_tb):
     self._shutdown.set()
     if self._update_task:
-        await self._update_task
-    
+      await self._update_task
     self.price_monitor.stop()
-    
     if self.client:
-        self.client.close()
+      self.client.close()
 
 
   async def _init_setup(self) -> None:
-    print('[CLIENT] Refreshing contracts...')
     await self._refresh_contracts()
-    print('[CLIENT] Contracts refreshed')
-    
-    print('[CLIENT] Setting position mode...')
     await self._set_position_mode()
-    print('[CLIENT] Position mode set')
-    
-    print('[CLIENT] Creating update task...')
     self._update_task = asyncio.create_task(self._contracts_updater())
-    print('[CLIENT] Update task created')
 
 
   async def _refresh_contracts(self) -> None:
@@ -212,6 +199,7 @@ class GateClient:
     if not multiplier:
       raise ValueError(f"Contract {contract} not found in cache")
     return float(multiplier)
+
 
   def get_price(self, contract: str) -> float | None:
     return self.price_monitor.get_price(contract)
