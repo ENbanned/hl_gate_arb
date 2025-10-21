@@ -6,6 +6,8 @@ import gate_api
 from gate_api import ApiClient, Configuration, FuturesApi, FuturesOrder
 from gate_api.exceptions import GateApiException
 
+from .price_monitor import GatePriceMonitor
+
 
 __all__ = ['GateClient']
 
@@ -21,6 +23,7 @@ class GateClient:
     'client',
     'futures_api',
     'contracts_meta',
+    'price_monitor',
     '_update_task',
     '_shutdown'
   )
@@ -43,6 +46,7 @@ class GateClient:
     self.config = Configuration(host=host, key=api_key, secret=api_secret)
     self.client = ApiClient(self.config)
     self.futures_api = FuturesApi(self.client)
+    self.price_monitor = GatePriceMonitor(settle)
     
     self.contracts_meta: dict[str, Decimal] = {}
     self._update_task = None
@@ -51,15 +55,19 @@ class GateClient:
 
   async def __aenter__(self):
     await self._init_setup()
+    await self.price_monitor.start()
     return self
 
 
   async def __aexit__(self, exc_type, exc_val, exc_tb):
     self._shutdown.set()
     if self._update_task:
-      await self._update_task
+        await self._update_task
+    
+    self.price_monitor.stop()
+    
     if self.client:
-      self.client.close()
+        self.client.close()
 
 
   async def _init_setup(self) -> None:
@@ -192,3 +200,19 @@ class GateClient:
     if not multiplier:
       raise ValueError(f"Contract {contract} not found in cache")
     return float(multiplier)
+
+  def get_price(self, contract: str) -> float | None:
+    return self.price_monitor.get_price(contract)
+
+
+  def get_price_unsafe(self, contract: str) -> float:
+    return self.price_monitor.get_price_unsafe(contract)
+
+
+  def has_price(self, contract: str) -> bool:
+    return self.price_monitor.has_price(contract)
+
+
+  @property
+  def all_prices(self) -> dict[str, float]:
+    return self.price_monitor.prices
