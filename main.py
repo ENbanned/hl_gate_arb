@@ -42,6 +42,7 @@ class Hyperliquid:
 
   async def _refresh_meta(self):
     meta, _ = await asyncio.to_thread(self.info.meta_and_asset_ctxs)
+    print(meta)
     self.assets_meta = {
       asset['name']: {
         'max_leverage': asset['maxLeverage'],
@@ -114,46 +115,8 @@ class Hyperliquid:
     )
 
 
-  async def limit_order(
-    self, 
-    name: str, 
-    is_buy: bool, 
-    sz: float, 
-    limit_px: float,
-    reduce_only: bool = False
-  ):
-    return await asyncio.to_thread(
-      self.exchange.order,
-      name,
-      is_buy,
-      sz,
-      limit_px,
-      {"limit": {"tif": "Gtc"}},
-      reduce_only
-    )
-
-
-  async def cancel_order(self, name: str, oid: int):
-    return await asyncio.to_thread(self.exchange.cancel, name, oid)
-
-
-  async def cancel_all_orders(self, name: str):
-    orders = await self.open_orders()
-    cancels = [
-      {"coin": order["coin"], "oid": order["oid"]} 
-      for order in orders 
-      if order["coin"] == name
-    ]
-    if cancels:
-      return await asyncio.to_thread(self.exchange.bulk_cancel, cancels)
-
-
   async def set_leverage(self, name: str, leverage: int, is_cross: bool = False):
     return await asyncio.to_thread(self.exchange.update_leverage, leverage, name, is_cross)
-
-
-  async def transfer_usd(self, amount: float, destination: str):
-    return await asyncio.to_thread(self.exchange.usd_transfer, amount, destination)
 
 
 async def main():
