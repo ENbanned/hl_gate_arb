@@ -1,5 +1,3 @@
-# example_usage.py
-
 import asyncio
 
 from settings import GATE_API_KEY, GATE_API_SECRET
@@ -16,16 +14,17 @@ async def main():
     ena_price = gate.get_price('ENA_USDT')
     eth_price = gate.get_price('ETH_USDT')
     
-    print(f'BTC: ${btc_price}')
-    print(f'ENA: ${ena_price}')
-    print(f'ETH: ${eth_price}')
+    print(f'BTC price (float): {btc_price}')
+    print(f'ENA price (float): {ena_price}')
+    print(f'ETH price (float): {eth_price}')
+    print(f'Type: {type(btc_price)}')
     
     print(f'\nTotal contracts tracked: {len(gate.all_prices)}')
     
     for _ in range(10):
       await asyncio.sleep(1)
       new_btc = gate.get_price_unsafe('BTC_USDT')
-      print(f'BTC: ${new_btc:,.2f}')
+      print(f'BTC: {new_btc}')
 
 
 asyncio.run(main())
