@@ -180,12 +180,15 @@ class HyperliquidClient:
       name, 
       is_cross
     )
+  # {'status': 'ok', 'response': {'type': 'default'}}
 
 
   def get_asset_meta(self, name: str) -> dict[str, Any] | None:
     return self.assets_meta.get(name)
+  # {'max_leverage': 10, 'sz_decimals': 0}
 
 
   def get_sz_decimals(self, name: str) -> int | None:
     meta = self.assets_meta.get(name)
     return meta['sz_decimals'] if meta else None
+  # 5
