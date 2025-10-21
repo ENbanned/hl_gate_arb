@@ -6,7 +6,7 @@ from src.exchanges.hyperliquid.client import HyperliquidClient
 
 async def main():
   async with HyperliquidClient(HYPERLIQUID_SECRET_KEY, HYPERLIQUID_ACCOUNT_ADDRESS) as hl:
-    з
+    print(123)
     result = hl.get_price('ENA')
     print(result)
     

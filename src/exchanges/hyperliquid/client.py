@@ -28,15 +28,20 @@ class HyperliquidClient:
     self._update_task = None
     self._shutdown = asyncio.Event()
     
+    print(1234)
     self.price_monitor = HyperliquidPriceMonitor()
+    print(12345)
 
 
   async def __aenter__(self):
     await self._refresh_meta()
     self._update_task = asyncio.create_task(self._meta_updater())
     
+    print(123456)
     self.price_monitor.info = self.info
+    print(1234567)
     await self.price_monitor.start()
+    print(1234578)
 
     return self
 

@@ -17,8 +17,11 @@ class HyperliquidPriceMonitor:
 
 
   async def start(self):
+    print(12345678)
     self.info.subscribe({'type': 'allMids'}, self._ws_callback)
+    print(123456789)
     await self._ready.wait()
+    print(1234567890)
 
 
   def get_price(self, coin: str) -> float | None:
