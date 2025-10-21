@@ -36,6 +36,8 @@ class HyperliquidClient:
     
     self.price_monitor = HyperliquidPriceMonitor()
     self.price_monitor.info = self.info
+    await self.price_monitor.start()
+
     return self
 
 
@@ -76,6 +78,10 @@ class HyperliquidClient:
 
   async def all_mids(self, dex: str = ""):
     return await asyncio.to_thread(self.info.all_mids, dex)
+
+
+  async def get_price(self, coin: str) -> float | None:
+    return await self.price_monitor.get_price(coin)
 
 
   async def user_fills(self, address: str | None = None):
