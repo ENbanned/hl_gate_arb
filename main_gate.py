@@ -6,25 +6,21 @@ from src.exchanges.gate.client import GateClient
 
 async def main():
   async with GateClient(GATE_API_KEY, GATE_API_SECRET) as gate:
-    print('Connected to Gate.io')
-    
-    await asyncio.sleep(1)
-    
-    btc_price = gate.get_price('BTC_USDT')
-    ena_price = gate.get_price('ENA_USDT')
-    eth_price = gate.get_price('ETH_USDT')
-    
-    print(f'BTC price (float): {btc_price}')
-    print(f'ENA price (float): {ena_price}')
-    print(f'ETH price (float): {eth_price}')
-    print(f'Type: {type(btc_price)}')
-    
-    print(f'\nTotal contracts tracked: {len(gate.all_prices)}')
-    
-    for _ in range(10):
-      await asyncio.sleep(1)
-      new_btc = gate.get_price_unsafe('BTC_USDT')
-      print(f'BTC: {new_btc}')
+    # methods = [m for m in dir(GateClient) if callable(getattr(GateClient, m))]
+    # print(methods)
+
+    result_1 = gate.get_price('ENA_USDT')
+    print(result_1)
+
+    result_2 = ...
+    print(result_2)
+
+    result_3 = ...
+    print(result_3)
+
+    result_4 = ...
+    print(result_4)
+
 
 
 asyncio.run(main())
