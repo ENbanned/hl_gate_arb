@@ -89,7 +89,7 @@ class GateClient:
         self.settle
       )
       
-      current_dual = getattr(account, 'enable_dual_mode', False)
+      current_dual = getattr(account, 'in_dual_mode', False) or getattr(account, 'enable_new_dual_mode', False)
       
       if current_dual != self.dual_mode:
         positions = await asyncio.to_thread(
