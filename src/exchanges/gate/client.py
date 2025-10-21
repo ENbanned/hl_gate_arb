@@ -42,6 +42,7 @@ class GateClient:
 
 
   async def __aenter__(self):
+    await self._ensure_single_mode()
     return self
 
 
@@ -49,6 +50,55 @@ class GateClient:
     self._shutdown.set()
     if self.client:
       self.client.close()
+
+
+  async def _ensure_single_mode(self) -> None:
+    try:
+      account = await asyncio.to_thread(
+        self.futures_api.list_futures_accounts,
+        self.settle
+      )
+      
+      if hasattr(account, 'enable_dual_mode') and account.enable_dual_mode:
+        positions = await asyncio.to_thread(
+          self.futures_api.list_positions,
+          self.settle
+        )
+        
+        if positions and any(p.size != 0 for p in positions):
+          raise RuntimeError(
+            "Cannot switch to single mode: close all positions first"
+          )
+        
+        await asyncio.to_thread(
+          self.futures_api.set_dual_mode,
+          self.settle,
+          False
+        )
+    except GateApiException as ex:
+      if ex.label != "USER_NOT_FOUND":
+        raise RuntimeError(f"Failed to ensure single mode: {ex.message}") from ex
+
+
+  async def get_contract_info(self, contract: str) -> Any:
+    try:
+      return await asyncio.to_thread(
+        self.futures_api.get_futures_contract,
+        self.settle,
+        contract
+      )
+    except GateApiException as ex:
+      raise RuntimeError(f"Failed to get contract info: {ex.message}") from ex
+
+
+  async def get_positions(self) -> Any:
+    try:
+      return await asyncio.to_thread(
+        self.futures_api.list_positions,
+        self.settle
+      )
+    except GateApiException as ex:
+      raise RuntimeError(f"Failed to get positions: {ex.message}") from ex
 
 
   async def buy_market(self, contract: str, size: int) -> Any:

@@ -9,6 +9,7 @@ async def main():
     print(123)
     result = await gate.buy_market('ENA_USDT', 100)
 
+    await asyncio.sleep(10)
     print(result)
     result = await gate.sell_market('ENA_USDT', 100)
 
