@@ -1,5 +1,10 @@
 import asyncio
 
+import gate_api
+
+
 
 class GateClient:
-    def
+    
+    def __init__(self):
+        
