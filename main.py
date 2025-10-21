@@ -66,11 +66,7 @@ class Hyperliquid:
   async def user_state(self, address: str | None = None, dex: str = ""):
     address = address or self.account_address
     return await asyncio.to_thread(self.info.user_state, address, dex)
-
-
-  async def open_orders(self, address: str | None = None, dex: str = ""):
-    address = address or self.account_address
-    return await asyncio.to_thread(self.info.open_orders, address, dex)
+    # {'marginSummary': {'accountValue': '463.461863', 'totalNtlPos': '88.666', 'totalRawUsd': '374.795863', 'totalMarginUsed': '8.8666'}, 'crossMarginSummary': {'accountValue': '463.461863', 'totalNtlPos': '88.666', 'totalRawUsd': '374.795863', 'totalMarginUsed': '8.8666'}, 'crossMaintenanceMarginUsed': '4.4333', 'withdrawable': '454.595263', 'assetPositions': [{'type': 'oneWay', 'position': {'coin': 'ENA', 'szi': '200.0', 'leverage': {'type': 'cross', 'value': 10}, 'entryPx': '0.443405', 'positionValue': '88.666', 'unrealizedPnl': '-0.015', 'returnOnEquity': '-0.0016914559', 'liquidationPx': None, 'marginUsed': '8.8666', 'maxLeverage': 10, 'cumFunding': {'allTime': '0.0', 'sinceOpen': '0.0', 'sinceChange': '0.0'}}}], 'time': 1761051391167}
 
 
   async def all_mids(self, dex: str = ""):
@@ -82,6 +78,10 @@ class Hyperliquid:
     return await asyncio.to_thread(self.info.user_fills, address)
 
 
+  async def get_open_positions(self, address: str | None = None):
+    return await asyncio.to_thread(self.info.)
+
+
   async def buy_market(self, name: str, sz: float, px: float | None = None, slippage: float = 0.05):
     return await asyncio.to_thread(
       self.exchange.market_open, 
@@ -91,6 +91,7 @@ class Hyperliquid:
       px, 
       slippage
     )
+    # {'status': 'ok', 'response': {'type': 'order', 'data': {'statuses': [{'filled': {'totalSz': '100.0', 'avgPx': '0.44337', 'oid': 208176159676}}]}}}
 
 
   async def sell_market(self, name: str, sz: float, px: float | None = None, slippage: float = 0.05):
@@ -102,16 +103,7 @@ class Hyperliquid:
       px, 
       slippage
     )
-
-
-  async def market_close(self, name: str, sz: float | None = None, px: float | None = None, slippage: float = 0.05):
-    return await asyncio.to_thread(
-      self.exchange.market_close,
-      name,
-      sz,
-      px,
-      slippage
-    )
+    # {'status': 'ok', 'response': {'type': 'order', 'data': {'statuses': [{'filled': {'totalSz': '200.0', 'avgPx': '0.44336', 'oid': 208176168605}}]}}}
 
 
   async def set_leverage(self, name: str, leverage: int, is_cross: bool = False):
@@ -120,16 +112,8 @@ class Hyperliquid:
 
 async def main():
   async with Hyperliquid(HYPERLIQUID_SECRET_KEY, HYPERLIQUID_ACCOUNT_ADDRESS) as hl:
-    print(hl.assets_meta['BTC']['max_leverage'])
-    
-    result = await hl.buy_market('ENA', 100)
-    print(result)
-    
-    state = await hl.user_state()
-    print(state)
 
-    open_orders = await hl.open_orders()
-    print(open_orders)
+    result = await hl.
     
     await asyncio.sleep(1000)
 
