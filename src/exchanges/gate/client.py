@@ -51,17 +51,12 @@ class GateClient:
       self.client.close()
 
 
-  async def open_long(
-    self, 
-    contract: str, 
-    size: int, 
-    price: str | None = None
-  ) -> Any:
+  async def buy_market(self, contract: str, size: int) -> Any:
     order = FuturesOrder(
       contract=contract,
       size=size,
-      price=price or '0',
-      tif='ioc' if not price else 'gtc'
+      price='0',
+      tif='ioc'
     )
     
     try:
@@ -71,20 +66,15 @@ class GateClient:
         order
       )
     except GateApiException as ex:
-      raise RuntimeError(f"Failed to open long: {ex.message}") from ex
+      raise RuntimeError(f"Failed to buy market: {ex.message}") from ex
 
 
-  async def open_short(
-    self, 
-    contract: str, 
-    size: int, 
-    price: str | None = None
-  ) -> Any:
+  async def sell_market(self, contract: str, size: int) -> Any:
     order = FuturesOrder(
       contract=contract,
       size=-abs(size),
-      price=price or '0',
-      tif='ioc' if not price else 'gtc'
+      price='0',
+      tif='ioc'
     )
     
     try:
@@ -94,26 +84,4 @@ class GateClient:
         order
       )
     except GateApiException as ex:
-      raise RuntimeError(f"Failed to open short: {ex.message}") from ex
-
-
-  async def close_position(
-    self, 
-    contract: str,
-    size: int = 0
-  ) -> Any:
-    order = FuturesOrder(
-      contract=contract,
-      size=size,
-      close=True if size == 0 else False,
-      reduce_only=True if size != 0 else False
-    )
-    
-    try:
-      return await asyncio.to_thread(
-        self.futures_api.create_futures_order,
-        self.settle,
-        order
-      )
-    except GateApiException as ex:
-      raise RuntimeError(f"Failed to close position: {ex.message}") from ex
+      raise RuntimeError(f"Failed to sell market: {ex.message}") from ex
