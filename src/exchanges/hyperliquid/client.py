@@ -9,6 +9,7 @@ from hyperliquid.info import Info
 
 
 class HyperliquidClient:
+  
   def __init__(
     self, 
     secret_key: str, 
@@ -28,21 +29,13 @@ class HyperliquidClient:
     self._update_task = None
     self._shutdown = asyncio.Event()
     
-    print(1234)
-    self.price_monitor = HyperliquidPriceMonitor()
-    print(12345)
+    self.price_monitor = HyperliquidPriceMonitor(self.info)
 
 
   async def __aenter__(self):
     await self._refresh_meta()
     self._update_task = asyncio.create_task(self._meta_updater())
-    
-    print(123456)
-    self.price_monitor.info = self.info
-    print(1234567)
     await self.price_monitor.start()
-    print(1234578)
-
     return self
 
 
@@ -87,6 +80,10 @@ class HyperliquidClient:
 
   def get_price(self, coin: str) -> float | None:
     return self.price_monitor.get_price(coin)
+
+
+  def get_all_prices(self) -> dict[str, float]:
+    return self.price_monitor.get_all_prices()
 
 
   async def user_fills(self, address: str | None = None):
