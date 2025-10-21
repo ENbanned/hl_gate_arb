@@ -26,48 +26,56 @@ class GatePriceMonitor:
 
 
   def _on_message(self, ws: Any, message: str) -> None:
+    print(f'[WS] Message received: {message[:200]}...')  # первые 200 символов
     try:
-      msg = json.loads(message)
-      
-      if msg.get('channel') == 'futures.tickers' and msg.get('event') == 'update':
-        result = msg.get('result', [])
-        prices = self._prices
+        msg = json.loads(message)
+        print(f'[WS] Parsed channel: {msg.get("channel")}, event: {msg.get("event")}')
         
-        for ticker in result:
-          contract = ticker.get('contract')
-          last = ticker.get('last')
-          
-          if contract and last:
-            prices[contract] = float(last)
+        if msg.get('channel') == 'futures.tickers' and msg.get('event') == 'update':
+            result = msg.get('result', [])
+            prices = self._prices
+            print(f'[WS] Processing {len(result)} tickers')
+            
+            for ticker in result:
+                contract = ticker.get('contract')
+                last = ticker.get('last')
+                
+                if contract and last:
+                    prices[contract] = float(last)
+            
+            if not self._is_ready:
+                print('[WS] Setting ready state')
+                self._is_ready = True
+                if self._loop:
+                    self._loop.call_soon_threadsafe(self._ready.set)
         
-        if not self._is_ready:
-          self._is_ready = True
-          if self._loop:
-            self._loop.call_soon_threadsafe(self._ready.set)
-      
-      elif msg.get('channel') == 'futures.tickers' and msg.get('event') == 'subscribe':
-        if msg.get('error') is None:
-          pass
+        elif msg.get('channel') == 'futures.tickers' and msg.get('event') == 'subscribe':
+            print(f'[WS] Subscribe response: {msg}')
+            if msg.get('error') is None:
+                print('[WS] Subscription successful')
     
-    except Exception:
-      pass
+    except Exception as e:
+        print(f'[WS] Error in _on_message: {e}')
+
 
 
   def _on_error(self, ws: Any, error: Any) -> None:
-    pass
+    print(f'[WS] Error: {error}')
 
 
   def _on_close(self, ws: Any, close_status_code: Any, close_msg: Any) -> None:
-    pass
+    print(f'[WS] Connection closed: {close_status_code} - {close_msg}')
 
 
   def _on_open(self, ws: Any) -> None:
+    print('[WS] Connection opened')
     subscribe_msg = {
-      'time': int(asyncio.get_event_loop().time()),
-      'channel': 'futures.tickers',
-      'event': 'subscribe',
-      'payload': []
+        'time': int(asyncio.get_event_loop().time()),
+        'channel': 'futures.tickers',
+        'event': 'subscribe',
+        'payload': []
     }
+    print(f'[WS] Sending subscribe: {subscribe_msg}')
     ws.send(json.dumps(subscribe_msg))
 
 

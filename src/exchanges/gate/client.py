@@ -54,8 +54,17 @@ class GateClient:
 
 
   async def __aenter__(self):
+    print('[CLIENT] Starting __aenter__')
+    
+    print('[CLIENT] Calling _init_setup')
     await self._init_setup()
+    print('[CLIENT] _init_setup done')
+    
+    print('[CLIENT] Starting price monitor')
     await self.price_monitor.start()
+    print('[CLIENT] Price monitor started')
+    
+    print('[CLIENT] __aenter__ complete')
     return self
 
 
@@ -71,9 +80,17 @@ class GateClient:
 
 
   async def _init_setup(self) -> None:
+    print('[CLIENT] Refreshing contracts...')
     await self._refresh_contracts()
+    print('[CLIENT] Contracts refreshed')
+    
+    print('[CLIENT] Setting position mode...')
     await self._set_position_mode()
+    print('[CLIENT] Position mode set')
+    
+    print('[CLIENT] Creating update task...')
     self._update_task = asyncio.create_task(self._contracts_updater())
+    print('[CLIENT] Update task created')
 
 
   async def _refresh_contracts(self) -> None:
