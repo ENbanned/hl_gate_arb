@@ -1,6 +1,7 @@
 import asyncio
 import json
 import threading
+import time
 from typing import Any
 
 import websocket
@@ -26,38 +27,33 @@ class GatePriceMonitor:
 
 
   def _on_message(self, ws: Any, message: str) -> None:
-    print(f'[WS] Message received: {message[:200]}...')  # первые 200 символов
+
     try:
-        msg = json.loads(message)
-        print(f'[WS] Parsed channel: {msg.get("channel")}, event: {msg.get("event")}')
+      msg = json.loads(message)
+
+      
+      if msg.get('channel') == 'futures.tickers' and msg.get('event') == 'update':
+        result = msg.get('result', [])
+        prices = self._prices
+
         
-        if msg.get('channel') == 'futures.tickers' and msg.get('event') == 'update':
-            result = msg.get('result', [])
-            prices = self._prices
-            print(f'[WS] Processing {len(result)} tickers')
-            
-            for ticker in result:
-                contract = ticker.get('contract')
-                last = ticker.get('last')
-                
-                if contract and last:
-                    prices[contract] = float(last)
-            
-            if not self._is_ready:
-                print('[WS] Setting ready state')
-                self._is_ready = True
-                if self._loop:
-                    self._loop.call_soon_threadsafe(self._ready.set)
+        for ticker in result:
+          contract = ticker.get('contract')
+          last = ticker.get('last')
+          
+          if contract and last:
+            prices[contract] = float(last)
         
-        elif msg.get('channel') == 'futures.tickers' and msg.get('event') == 'subscribe':
-            print(f'[WS] Subscribe response: {msg}')
-            if msg.get('error') is None:
-                print('[WS] Subscription successful')
+        if not self._is_ready:
+          self._is_ready = True
+          if self._loop:
+            self._loop.call_soon_threadsafe(self._ready.set)
+      
+      elif msg.get('channel') == 'futures.tickers' and msg.get('event') == 'subscribe':
+        if msg.get('error') is None:
     
     except Exception as e:
-        print(f'[WS] Error in _on_message: {e}')
-
-
+        pass
 
   def _on_error(self, ws: Any, error: Any) -> None:
     print(f'[WS] Error: {error}')
@@ -67,36 +63,37 @@ class GatePriceMonitor:
     print(f'[WS] Connection closed: {close_status_code} - {close_msg}')
 
 
-  def _on_open(self, ws: Any) -> None:
-    print('[WS] Connection opened')
+  def _on_open(self, ws: Any, contracts: list[str]) -> None:
     subscribe_msg = {
-        'time': int(asyncio.get_event_loop().time()),
+        'time': int(time.time()),
         'channel': 'futures.tickers',
         'event': 'subscribe',
-        'payload': []
+        'payload': contracts
     }
-    print(f'[WS] Sending subscribe: {subscribe_msg}')
     ws.send(json.dumps(subscribe_msg))
 
 
-  async def start(self) -> None:
+  async def start(self, contracts: list[str]) -> None:
     self._loop = asyncio.get_running_loop()
     
     self._ws_app = websocket.WebSocketApp(
-      self.ws_url,
-      on_message=self._on_message,
-      on_error=self._on_error,
-      on_close=self._on_close,
-      on_open=self._on_open
+        self.ws_url,
+        on_message=self._on_message,
+        on_error=self._on_error,
+        on_close=self._on_close,
+        on_open=lambda ws: self._on_open(ws, contracts)
     )
     
+
     self._ws_thread = threading.Thread(
-      target=self._ws_app.run_forever,
-      daemon=True
+        target=self._ws_app.run_forever,
+        daemon=True
     )
     self._ws_thread.start()
     
+
     await self._ready.wait()
+
 
 
   def stop(self) -> None:
