@@ -76,6 +76,7 @@ class Hyperliquid:
   async def user_fills(self, address: str | None = None):
     address = address or self.account_address
     return await asyncio.to_thread(self.info.user_fills, address)
+    # [{'coin': 'ENA', 'px': '0.44336', 'sz': '200.0', 'side': 'A', 'time': 1761051392573, 'startPosition': '200.0', 'dir': 'Close Long', 'closedPnl': '-0.009', 'hash': '0x77212dfbbf91b3db789a042de991b302017a00e15a94d2ad1ae9d94e7e958dc6', 'oid': 208176168605, 'crossed': True, 'fee': '0.039902', 'tid': 976287900173452, 'feeToken': 'USDC', 'twapId': None}]Fff
 
 
   async def buy_market(self, name: str, sz: float, px: float | None = None, slippage: float = 0.05):
@@ -109,7 +110,7 @@ class Hyperliquid:
 async def main():
   async with Hyperliquid(HYPERLIQUID_SECRET_KEY, HYPERLIQUID_ACCOUNT_ADDRESS) as hl:
 
-    result = await hl.user_fills()
+    result = await hl.all_mids()
     print(result)
     
     await asyncio.sleep(1000)
