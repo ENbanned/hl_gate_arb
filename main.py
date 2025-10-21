@@ -78,10 +78,6 @@ class Hyperliquid:
     return await asyncio.to_thread(self.info.user_fills, address)
 
 
-  async def get_open_positions(self, address: str | None = None):
-    return await asyncio.to_thread(self.info.)
-
-
   async def buy_market(self, name: str, sz: float, px: float | None = None, slippage: float = 0.05):
     return await asyncio.to_thread(
       self.exchange.market_open, 
@@ -113,7 +109,8 @@ class Hyperliquid:
 async def main():
   async with Hyperliquid(HYPERLIQUID_SECRET_KEY, HYPERLIQUID_ACCOUNT_ADDRESS) as hl:
 
-    result = await hl.
+    result = await hl.user_fills()
+    print(result)
     
     await asyncio.sleep(1000)
 
