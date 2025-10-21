@@ -42,14 +42,13 @@ class Hyperliquid:
 
   async def _refresh_meta(self):
     meta, _ = await asyncio.to_thread(self.info.meta_and_asset_ctxs)
-    print(meta)
     self.assets_meta = {
       asset['name']: {
         'max_leverage': asset['maxLeverage'],
         'sz_decimals': asset['szDecimals'],
-        'only_isolated': asset['onlyIsolated']
       }
       for asset in meta['universe']
+      if not asset.get('isDelisted', False)
     }
 
 
@@ -128,6 +127,9 @@ async def main():
     
     state = await hl.user_state()
     print(state)
+
+    open_orders = await hl.open_orders()
+    print(open_orders)
     
     await asyncio.sleep(1000)
 
