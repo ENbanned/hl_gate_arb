@@ -15,15 +15,15 @@ async def main():
       gate: ExchangeClient = gate_client
       hyperliquid: ExchangeClient = hyperliquid_client
 
-      btc_info_gate = gate.get_symbol_info('XPL')
-      btc_info_hl = hyperliquid.get_symbol_info('XPL')
-
-      print(btc_info_gate)
-      print(btc_info_hl)
-      
-      await asyncio.sleep(5)
-      print(gate.price_monitor.get_price('XPL'))
-      print(hyperliquid.price_monitor.get_price('XPL'))
+      gate_funding = await asyncio.to_thread(
+          gate_client.futures_api.list_futures_funding_rate_history,
+          gate_client.settle,
+          'BTC_USDT',
+          limit=1
+        )
+      print("GATE FUNDING:")
+      print(gate_funding)
+      print(gate_funding[0].to_dict() if gate_funding else "Empty")
       # gate_open_positions = await gate.get_positions()
       # hyperliquid_open_positions = await hyperliquid.get_positions()
 
