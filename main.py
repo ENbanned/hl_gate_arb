@@ -1,6 +1,7 @@
 import asyncio
 
 from src.exchanges.common import ExchangeClient
+from src.exchanges.common.models import PositionSide
 from src.exchanges.gate import GateClient
 from src.exchanges.hyperliquid import HyperliquidClient
 
@@ -15,8 +16,8 @@ async def main():
       gate: ExchangeClient = gate_client
       hyperliquid: ExchangeClient = hyperliquid_client
 
-      gate_book = await gate.estimate_fill_price('ENA', 10000)
-      hyperliquid_book = await hyperliquid.estimate_fill_price('ENA')
+      gate_book = await gate.estimate_fill_price('ENA', 1000, PositionSide.SHORT)
+      hyperliquid_book = await hyperliquid.estimate_fill_price('ENA', 1000, PositionSide.SHORT)
 
       print(gate_book)
       print('*'*80)
