@@ -30,6 +30,7 @@ class PriceProvider(Protocol):
 @runtime_checkable
 class ExchangeClient(Protocol):
   price_monitor: PriceProvider
+  orderbook_monitor: OrderbookProvider
   
   async def buy_market(self, symbol: str, size: float) -> Order: ...
   
