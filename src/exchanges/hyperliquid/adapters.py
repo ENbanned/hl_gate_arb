@@ -1,5 +1,6 @@
 from decimal import Decimal
 from typing import Any
+import time
 
 from ..common.models import Balance, FundingRate, Order, Orderbook, OrderbookLevel, OrderStatus, Position, PositionSide, SymbolInfo, Volume24h
 
@@ -106,10 +107,13 @@ def adapt_symbol_info(raw: dict[str, Any]) -> SymbolInfo:
 
 
 def adapt_funding_rate(raw: dict[str, Any], symbol: str) -> FundingRate:
+  current_time = int(time.time())
+  next_hour = ((current_time // 3600) + 1) * 3600
+  
   return FundingRate(
     symbol=symbol,
     rate=Decimal(raw['funding']),
-    timestamp=int(raw.get('time', 0))
+    timestamp=next_hour
   )
 
 

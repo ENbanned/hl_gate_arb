@@ -15,10 +15,12 @@ async def main():
       gate: ExchangeClient = gate_client
       hyperliquid: ExchangeClient = hyperliquid_client
 
-      gate_book = await gate.get_orderbook('ENA')
-      hyperliquid_book = await hyperliquid.get_orderbook('ENA')
+      gate_book = await gate.estimate_fill_price('ENA', 10000)
+      hyperliquid_book = await hyperliquid.estimate_fill_price('ENA')
 
       print(gate_book)
+      print('*'*80)
+      print(hyperliquid_book)
       
 
 asyncio.run(main())
