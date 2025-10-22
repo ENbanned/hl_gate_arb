@@ -146,6 +146,7 @@ class GateClient:
 
   async def buy_market(self, contract: str, amount: float) -> Any:
     size = self._tokens_to_contracts(contract, amount)
+    print(size)
     
     order = FuturesOrder(
       contract=contract,
