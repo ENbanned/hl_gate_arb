@@ -1,12 +1,12 @@
 import asyncio
 import json
-import threading
 import time
 from collections import deque
 from decimal import Decimal
 from typing import Any
 
-import websocket
+import websockets
+from gate_api import FuturesApi
 
 from ..common.models import Orderbook, OrderbookLevel
 
@@ -23,29 +23,27 @@ class GateOrderbookMonitor:
     '_update_queues',
     '_base_ids',
     '_ready',
-    '_loop',
     '_is_ready',
-    '_ws_app',
-    '_ws_thread',
+    '_ws_task',
+    '_shutdown',
     '_contracts'
   )
   
-  def __init__(self, settle: str, futures_api):
+  def __init__(self, settle: str, futures_api: FuturesApi) -> None:
     self.settle = settle
     self.ws_url = f'wss://fx-ws.gateio.ws/v4/ws/{settle}'
     self.futures_api = futures_api
     self._orderbooks: dict[str, Orderbook] = {}
-    self._update_queues: dict[str, deque] = {}
+    self._update_queues: dict[str, deque[dict[str, Any]]] = {}
     self._base_ids: dict[str, int] = {}
     self._ready = asyncio.Event()
-    self._loop = None
     self._is_ready = False
-    self._ws_app = None
-    self._ws_thread = None
+    self._ws_task: asyncio.Task | None = None
+    self._shutdown = asyncio.Event()
     self._contracts: list[str] = []
 
 
-  def _on_message(self, ws: Any, message: str) -> None:
+  async def _handle_message(self, message: str) -> None:
     try:
       msg = json.loads(message)
       
@@ -74,10 +72,7 @@ class GateOrderbookMonitor:
         base_id = self._base_ids[symbol]
         
         if update_id_first > base_id + 1:
-          asyncio.run_coroutine_threadsafe(
-            self._resync_orderbook(symbol, contract),
-            self._loop
-          )
+          await self._resync_orderbook(symbol, contract)
           return
         
         if update_id_last < base_id + 1:
@@ -89,9 +84,9 @@ class GateOrderbookMonitor:
       elif event == 'subscribe':
         if not self._is_ready:
           self._is_ready = True
-          self._loop.call_soon_threadsafe(self._ready.set)
+          self._ready.set()
     
-    except (KeyError, ValueError, TypeError):
+    except (KeyError, ValueError, TypeError, json.JSONDecodeError):
       pass
 
 
@@ -185,45 +180,36 @@ class GateOrderbookMonitor:
       pass
 
 
-  def _on_error(self, ws: Any, error: Any) -> None:
-    pass
-
-
-  def _on_close(self, ws: Any, close_status_code: Any, close_msg: Any) -> None:
-    pass
-
-
-  def _on_open(self, ws: Any, contracts: list[str]) -> None:
-    subscriptions = []
-    for contract in contracts:
-      subscriptions.append([contract, '100ms', '100'])
-    
-    ws.send(json.dumps({
-      'time': int(time.time()),
-      'channel': 'futures.order_book_update',
-      'event': 'subscribe',
-      'payload': subscriptions
-    }))
+  async def _ws_loop(self, contracts: list[str]) -> None:
+    while not self._shutdown.is_set():
+      try:
+        async with websockets.connect(self.ws_url) as ws:
+          subscriptions = []
+          for contract in contracts:
+            subscriptions.append([contract, '100ms', '100'])
+          
+          subscribe_msg = json.dumps({
+            'time': int(time.time()),
+            'channel': 'futures.order_book_update',
+            'event': 'subscribe',
+            'payload': subscriptions
+          })
+          await ws.send(subscribe_msg)
+          
+          async for message in ws:
+            if self._shutdown.is_set():
+              break
+            await self._handle_message(message)
+      
+      except (websockets.exceptions.WebSocketException, ConnectionError, OSError):
+        if not self._shutdown.is_set():
+          await asyncio.sleep(5)
 
 
   async def start(self, contracts: list[str]) -> None:
-    self._loop = asyncio.get_running_loop()
     self._contracts = contracts
     
-    self._ws_app = websocket.WebSocketApp(
-      self.ws_url,
-      on_message=self._on_message,
-      on_error=self._on_error,
-      on_close=self._on_close,
-      on_open=lambda ws: self._on_open(ws, contracts)
-    )
-    
-    self._ws_thread = threading.Thread(
-      target=self._ws_app.run_forever,
-      daemon=True
-    )
-    self._ws_thread.start()
-    
+    self._ws_task = asyncio.create_task(self._ws_loop(contracts))
     await self._ready.wait()
     
     tasks = []
@@ -234,11 +220,14 @@ class GateOrderbookMonitor:
     await asyncio.gather(*tasks, return_exceptions=True)
 
 
-  def stop(self) -> None:
-    if self._ws_app:
-      self._ws_app.close()
-    if self._ws_thread and self._ws_thread.is_alive():
-      self._ws_thread.join(timeout=2)
+  async def stop(self) -> None:
+    self._shutdown.set()
+    if self._ws_task:
+      self._ws_task.cancel()
+      try:
+        await self._ws_task
+      except asyncio.CancelledError:
+        pass
 
 
   def get_orderbook(self, symbol: str) -> Orderbook | None:

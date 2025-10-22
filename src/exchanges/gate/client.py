@@ -73,8 +73,8 @@ class GateClient:
     self._shutdown.set()
     if self._update_task:
       await self._update_task
-    self.price_monitor.stop()
-    self.orderbook_monitor.stop()
+    await self.price_monitor.stop()
+    await self.orderbook_monitor.stop()
     if self.client:
       self.client.close()
 

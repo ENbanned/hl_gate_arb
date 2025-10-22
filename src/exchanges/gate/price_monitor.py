@@ -1,36 +1,35 @@
 import asyncio
 import json
-import threading
 import time
 from typing import Any
 
-import websocket
+import websockets
+from websockets.client import WebSocketClientProtocol
 
 
 __all__ = ['GatePriceMonitor']
 
 
 class GatePriceMonitor:
-  __slots__ = ('settle', 'ws_url', '_prices', '_ready', '_loop', '_is_ready', '_ws_app', '_ws_thread')
+  __slots__ = ('settle', 'ws_url', '_prices', '_ready', '_is_ready', '_ws_task', '_shutdown')
   
-  def __init__(self, settle: str = 'usdt'):
+  def __init__(self, settle: str = 'usdt') -> None:
     self.settle = settle
     self.ws_url = f'wss://fx-ws.gateio.ws/v4/ws/{settle}'
     self._prices: dict[str, float] = {}
     self._ready = asyncio.Event()
-    self._loop = None
     self._is_ready = False
-    self._ws_app = None
-    self._ws_thread = None
+    self._ws_task: asyncio.Task | None = None
+    self._shutdown = asyncio.Event()
 
 
-  def _on_message(self, ws: Any, message: str) -> None:
+  async def _handle_message(self, message: str) -> None:
     try:
       msg = json.loads(message)
-      channel = msg['channel']
+      channel = msg.get('channel')
       
       if channel == 'futures.tickers':
-        event = msg['event']
+        event = msg.get('event')
         
         if event == 'update':
           prices = self._prices
@@ -40,70 +39,63 @@ class GatePriceMonitor:
           
           if not self._is_ready:
             self._is_ready = True
-            self._loop.call_soon_threadsafe(self._ready.set)
+            self._ready.set()
         
         elif event == 'subscribe' and msg.get('error') is None and not self._is_ready:
           self._is_ready = True
-          self._loop.call_soon_threadsafe(self._ready.set)
+          self._ready.set()
     
-    except (KeyError, ValueError, TypeError):
+    except (KeyError, ValueError, TypeError, json.JSONDecodeError):
       pass
 
 
-  def _on_error(self, ws: Any, error: Any) -> None:
-    pass
-
-
-  def _on_close(self, ws: Any, close_status_code: Any, close_msg: Any) -> None:
-    pass
-
-
-  def _on_open(self, ws: Any, contracts: list[str]) -> None:
-    ws.send(json.dumps({
-      'time': int(time.time()),
-      'channel': 'futures.tickers',
-      'event': 'subscribe',
-      'payload': contracts
-    }))
+  async def _ws_loop(self, contracts: list[str]) -> None:
+    while not self._shutdown.is_set():
+      try:
+        async with websockets.connect(self.ws_url) as ws:
+          subscribe_msg = json.dumps({
+            'time': int(time.time()),
+            'channel': 'futures.tickers',
+            'event': 'subscribe',
+            'payload': contracts
+          })
+          await ws.send(subscribe_msg)
+          
+          async for message in ws:
+            if self._shutdown.is_set():
+              break
+            await self._handle_message(message)
+      
+      except (websockets.exceptions.WebSocketException, ConnectionError, OSError):
+        if not self._shutdown.is_set():
+          await asyncio.sleep(5)
 
 
   async def start(self, contracts: list[str]) -> None:
-    self._loop = asyncio.get_running_loop()
-    
-    self._ws_app = websocket.WebSocketApp(
-      self.ws_url,
-      on_message=self._on_message,
-      on_error=self._on_error,
-      on_close=self._on_close,
-      on_open=lambda ws: self._on_open(ws, contracts)
-    )
-    
-    self._ws_thread = threading.Thread(
-      target=self._ws_app.run_forever,
-      daemon=True
-    )
-    self._ws_thread.start()
-    
+    self._ws_task = asyncio.create_task(self._ws_loop(contracts))
     await self._ready.wait()
 
 
-  def stop(self) -> None:
-    if self._ws_app:
-      self._ws_app.close()
-    if self._ws_thread and self._ws_thread.is_alive():
-      self._ws_thread.join(timeout=2)
+  async def stop(self) -> None:
+    self._shutdown.set()
+    if self._ws_task:
+      self._ws_task.cancel()
+      try:
+        await self._ws_task
+      except asyncio.CancelledError:
+        pass
 
 
-  def get_price(self, contract: str) -> float | None:
-    return self._prices.get(contract)
+  def get_price(self, symbol: str) -> float | None:
+    return self._prices.get(symbol)
 
 
-  def get_price_unsafe(self, contract: str) -> float:
-    return self._prices[contract]
+  def get_price_unsafe(self, symbol: str) -> float:
+    return self._prices[symbol]
 
 
-  def has_price(self, contract: str) -> bool:
-    return contract in self._prices
+  def has_price(self, symbol: str) -> bool:
+    return symbol in self._prices
 
 
   @property

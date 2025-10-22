@@ -1,5 +1,8 @@
 import asyncio
 from decimal import Decimal
+from typing import Any
+
+from hyperliquid.info import Info
 
 from ..common.models import Orderbook, OrderbookLevel
 
@@ -8,17 +11,17 @@ __all__ = ['HyperliquidOrderbookMonitor']
 
 
 class HyperliquidOrderbookMonitor:
-  __slots__ = ('info', '_orderbooks', '_ready', '_loop', '_is_ready')
+  __slots__ = ('info', '_orderbooks', '_ready', '_is_ready', '_loop')
   
-  def __init__(self, info):
+  def __init__(self, info: Info) -> None:
     self.info = info
     self._orderbooks: dict[str, Orderbook] = {}
     self._ready = asyncio.Event()
-    self._loop = None
     self._is_ready = False
+    self._loop: asyncio.AbstractEventLoop | None = None
 
 
-  def _on_book_update(self, msg: dict) -> None:
+  def _on_book_update(self, msg: dict[str, Any]) -> None:
     if msg['channel'] != 'l2Book':
       return
     
@@ -42,7 +45,7 @@ class HyperliquidOrderbookMonitor:
       timestamp=data['time']
     )
     
-    if not self._is_ready:
+    if not self._is_ready and self._loop:
       self._is_ready = True
       self._loop.call_soon_threadsafe(self._ready.set)
 

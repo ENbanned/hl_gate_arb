@@ -1,18 +1,21 @@
 import asyncio
 from typing import Any
 
+from hyperliquid.info import Info
+
+
 __all__ = ['HyperliquidPriceMonitor']
 
 
 class HyperliquidPriceMonitor:
-  __slots__ = ('info', '_prices', '_ready', '_loop', '_is_ready')
+  __slots__ = ('info', '_prices', '_ready', '_is_ready', '_loop')
   
-  def __init__(self, info):
+  def __init__(self, info: Info) -> None:
     self.info = info
     self._prices: dict[str, float] = {}
     self._ready = asyncio.Event()
-    self._loop = None
     self._is_ready = False
+    self._loop: asyncio.AbstractEventLoop | None = None
 
 
   def _on_mids_update(self, msg: Any) -> None:
@@ -25,7 +28,7 @@ class HyperliquidPriceMonitor:
     for coin, px in data.items():
       prices[coin] = float(px)
     
-    if not self._is_ready:
+    if not self._is_ready and self._loop:
       self._is_ready = True
       self._loop.call_soon_threadsafe(self._ready.set)
 
