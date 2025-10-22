@@ -35,7 +35,8 @@ class GatePriceMonitor:
         if event == 'update':
           prices = self._prices
           for ticker in msg['result']:
-            prices[ticker['contract']] = float(ticker['last'])
+            contract = ticker['contract'].replace('_USDT', '')
+            prices[contract] = float(ticker['last'])
           
           if not self._is_ready:
             self._is_ready = True
