@@ -15,8 +15,14 @@ async def main():
       gate: ExchangeClient = gate_client
       hyperliquid: ExchangeClient = hyperliquid_client
 
-      open_gate = await gate.buy_market('ENA', 100)
-      print(open_gate)
+      await gate.set_leverage('ENA', 20)
+      order = await gate.buy_market('ENA', 100)
+      print(order)
+
+      positions = await gate.get_positions()
+      for pos in positions:
+        if pos.coin == 'ENA':
+          print(f"mode field from raw: {raw_position}")  # нужен raw response
       # gate_open_positions = await gate.get_positions()
       # hyperliquid_open_positions = await hyperliquid.get_positions()
 

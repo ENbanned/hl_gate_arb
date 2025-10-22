@@ -24,6 +24,7 @@ class HyperliquidClient:
     'exchange',
     'price_monitor',
     'assets_meta',
+    '_leverage_cache',
     '_update_task',
     '_shutdown',
     '_account'
@@ -49,6 +50,7 @@ class HyperliquidClient:
     )
     
     self.assets_meta: dict[str, dict[str, Any]] = {}
+    self._leverage_cache: dict[str, int] = {}
     self._update_task = None
     self._shutdown = asyncio.Event()
     
@@ -96,7 +98,30 @@ class HyperliquidClient:
         await self._refresh_meta()
 
 
-  async def buy_market(self, symbol: str, size: float, slippage: float = 0.05) -> Order:
+  async def _ensure_leverage(self, symbol: str, leverage: int) -> None:
+    if self._leverage_cache.get(symbol) == leverage:
+      return
+    
+    try:
+      await asyncio.to_thread(
+        self.exchange.update_leverage,
+        leverage,
+        symbol,
+        True
+      )
+      self._leverage_cache[symbol] = leverage
+    except Exception as ex:
+      raise OrderError(f"Failed to set leverage: {str(ex)}") from ex
+
+
+  async def set_leverage(self, symbol: str, leverage: int) -> None:
+    await self._ensure_leverage(symbol, leverage)
+
+
+  async def buy_market(self, symbol: str, size: float, leverage: int | None = None, slippage: float = 0.05) -> Order:
+    if leverage:
+      await self._ensure_leverage(symbol, leverage)
+    
     try:
       raw = await asyncio.to_thread(
         self.exchange.market_open, 
@@ -111,7 +136,10 @@ class HyperliquidClient:
       raise OrderError(f"Failed to buy market: {str(ex)}") from ex
 
 
-  async def sell_market(self, symbol: str, size: float, slippage: float = 0.05) -> Order:
+  async def sell_market(self, symbol: str, size: float, leverage: int | None = None, slippage: float = 0.05) -> Order:
+    if leverage:
+      await self._ensure_leverage(symbol, leverage)
+    
     try:
       raw = await asyncio.to_thread(
         self.exchange.market_open, 

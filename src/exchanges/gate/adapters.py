@@ -9,6 +9,18 @@ def adapt_position(raw: dict[str, Any]) -> Position | None:
   if size == 0:
     return None
   
+  margin_used = Decimal(raw.get('initial_margin', '0'))
+  if margin_used == 0:
+    value = Decimal(raw.get('value', '0'))
+    leverage_str = raw.get('leverage', '0')
+    if leverage_str and leverage_str != '0':
+      leverage_val = Decimal(leverage_str)
+      if leverage_val > 0:
+        margin_used = value / leverage_val
+  
+  leverage_str = raw.get('leverage', '0')
+  leverage = int(leverage_str) if leverage_str and leverage_str != '0' else None
+  
   return Position(
     coin=raw['contract'].replace('_USDT', ''),
     size=Decimal(str(abs(size))),
@@ -17,8 +29,8 @@ def adapt_position(raw: dict[str, Any]) -> Position | None:
     mark_price=Decimal(raw.get('mark_price', '0')),
     unrealized_pnl=Decimal(raw.get('unrealised_pnl', '0')),
     liquidation_price=Decimal(raw['liq_price']) if raw.get('liq_price') and raw['liq_price'] != '0' else None,
-    margin_used=Decimal(raw.get('margin', '0')),
-    leverage=int(raw['leverage']) if raw.get('leverage') and raw['leverage'] != '0' else None,
+    margin_used=margin_used,
+    leverage=leverage,
   )
 
 
