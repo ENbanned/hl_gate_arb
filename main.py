@@ -45,6 +45,80 @@ async def main():
       print(f'Gate positions at the end: {gate_open_positions}')
       print(f'Hyperliquid positions at the end: {hyperliquid_open_positions}')
 
+  
+"""
+
+Gate positions before: []
+Hyperliquid positions before: []
+
+GATE LONG 100 ENA: 
+order_id='61643020747359378' 
+coin='ENA' size=Decimal('10') 
+side=<PositionSide.LONG: 'long'> 
+fill_price=Decimal('0.4314') 
+status=<OrderStatus.FILLED: 'filled'> 
+fee=Decimal('0.002070720')
+
+HYPERLIQUID LONG 100 ENA: 
+order_id='209446386207' 
+coin='ENA' size=Decimal('100.0') 
+side=<PositionSide.LONG: 'long'> 
+fill_price=Decimal('0.43104') 
+status=<OrderStatus.FILLED: 'filled'> 
+fee=Decimal('0')
+
+Gate positions after: 
+[
+  Position(
+    coin='ENA', 
+    size=Decimal('10'), 
+    side=<PositionSide.LONG: 'long'>, 
+    entry_price=Decimal('0.4314'), 
+    mark_price=Decimal('0.4314'), 
+    unrealized_pnl=Decimal('0'), 
+    liquidation_price=None, 
+    margin_used=Decimal('0'), 
+    leverage=None
+  )
+]
+Hyperliquid positions after: 
+[
+  Position(
+    coin='ENA', 
+    size=Decimal('100.0'), 
+    side=<PositionSide.LONG: 'long'>, 
+    entry_price=Decimal('0.43104'), 
+    mark_price=Decimal('0.43104'), 
+    unrealized_pnl=Decimal('0.002'), 
+    liquidation_price=Decimal('0.3631852211'), 
+    margin_used=Decimal('8.603404'), 
+    leverage=5
+  )
+]
+
+GATE CLOSE LONG 100 ENA: 
+order_id='61643020747359438' 
+coin='ENA' size=Decimal('10') 
+side=<PositionSide.SHORT: 'short'> 
+fill_price=Decimal('0.4314') 
+status=<OrderStatus.FILLED: 'filled'> 
+fee=Decimal('0.002070720')
+
+HYPERLIQUID CLOSE LONG 100 ENA: 
+order_id='209446401177' 
+coin='ENA' 
+size=Decimal('100.0') 
+side=<PositionSide.SHORT: 'short'> 
+fill_price=Decimal('0.431') 
+status=<OrderStatus.FILLED: 'filled'> 
+fee=Decimal('0')
+
+Gate positions at the end: []
+Hyperliquid positions at the end: []
+
+
+"""
+
 
 
 
