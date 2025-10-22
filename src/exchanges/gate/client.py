@@ -6,6 +6,9 @@ import gate_api
 from gate_api import ApiClient, Configuration, FuturesApi, FuturesOrder
 from gate_api.exceptions import GateApiException
 
+from ..common.exceptions import InvalidSymbolError, OrderError
+from ..common.models import Balance, Order, Position
+from .adapters import adapt_balance, adapt_order, adapt_position
 from .price_monitor import GatePriceMonitor
 
 
@@ -130,90 +133,85 @@ class GateClient:
         await self._refresh_contracts()
 
 
+  def _symbol_to_contract(self, symbol: str) -> str:
+    return f'{symbol}_USDT'
+
+
   def _tokens_to_contracts(self, contract: str, amount: float) -> int:
     multiplier = self.contracts_meta.get(contract)
     if not multiplier:
-      raise ValueError(f"Contract {contract} not found in cache")
+      raise InvalidSymbolError(f"Contract {contract} not found in cache")
     return int(Decimal(str(amount)) / multiplier)
 
 
-  def _contracts_to_tokens(self, contract: str, contracts: int) -> float:
-    multiplier = self.contracts_meta.get(contract)
-    if not multiplier:
-      raise ValueError(f"Contract {contract} not found in cache")
-    return float(Decimal(str(contracts)) * multiplier)
-
-
-  async def buy_market(self, contract: str, amount: float) -> Any:
-    size = self._tokens_to_contracts(contract, amount)
-    print(size)
+  async def buy_market(self, symbol: str, size: float) -> Order:
+    contract = self._symbol_to_contract(symbol)
+    contracts = self._tokens_to_contracts(contract, size)
     
     order = FuturesOrder(
       contract=contract,
-      size=size,
+      size=contracts,
       price='0',
       tif='ioc'
     )
     
     try:
-      return await asyncio.to_thread(
+      raw = await asyncio.to_thread(
         self.futures_api.create_futures_order,
         self.settle,
         order
       )
+      return adapt_order(raw.to_dict())
     except GateApiException as ex:
-      raise RuntimeError(f"Failed to buy market: {ex.message}") from ex
+      raise OrderError(f"Failed to buy market: {ex.message}") from ex
 
 
-  async def sell_market(self, contract: str, amount: float) -> Any:
-    size = self._tokens_to_contracts(contract, amount)
+  async def sell_market(self, symbol: str, size: float) -> Order:
+    contract = self._symbol_to_contract(symbol)
+    contracts = self._tokens_to_contracts(contract, size)
     
     order = FuturesOrder(
       contract=contract,
-      size=-abs(size),
+      size=-abs(contracts),
       price='0',
       tif='ioc'
     )
     
     try:
-      return await asyncio.to_thread(
+      raw = await asyncio.to_thread(
         self.futures_api.create_futures_order,
         self.settle,
         order
       )
+      return adapt_order(raw.to_dict())
     except GateApiException as ex:
-      raise RuntimeError(f"Failed to sell market: {ex.message}") from ex
+      raise OrderError(f"Failed to sell market: {ex.message}") from ex
 
 
-  async def get_positions(self) -> Any:
+  async def get_positions(self) -> list[Position]:
     try:
-      return await asyncio.to_thread(
+      raw_positions = await asyncio.to_thread(
         self.futures_api.list_positions,
         self.settle
       )
+      
+      positions = []
+      for raw in raw_positions:
+        pos = adapt_position(raw.to_dict())
+        if pos:
+          positions.append(pos)
+      
+      return positions
     except GateApiException as ex:
-      raise RuntimeError(f"Failed to get positions: {ex.message}") from ex
+      raise OrderError(f"Failed to get positions: {ex.message}") from ex
 
 
-  def get_multiplier(self, contract: str) -> float:
-    multiplier = self.contracts_meta.get(contract)
-    if not multiplier:
-      raise ValueError(f"Contract {contract} not found in cache")
-    return float(multiplier)
-
-
-  def get_price(self, contract: str) -> float | None:
-    return self.price_monitor.get_price(contract)
-
-
-  def get_price_unsafe(self, contract: str) -> float:
-    return self.price_monitor.get_price_unsafe(contract)
-
-
-  def has_price(self, contract: str) -> bool:
-    return self.price_monitor.has_price(contract)
-
-
-  @property
-  def all_prices(self) -> dict[str, float]:
-    return self.price_monitor.prices
+  async def get_balance(self) -> Balance:
+    try:
+      account = await asyncio.to_thread(
+        self.futures_api.list_futures_accounts,
+        self.settle
+      )
+      return adapt_balance(account.to_dict())
+    except GateApiException as ex:
+      raise OrderError(f"Failed to get balance: {ex.message}") from ex
