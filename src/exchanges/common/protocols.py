@@ -1,7 +1,18 @@
 from typing import Protocol, runtime_checkable
 from decimal import Decimal
 
-from .models import Balance, Order, Position, SymbolInfo, FundingRate, Orderbook, Volume24h, PositionSide
+from .models import Balance, Order, Position, SymbolInfo, FundingRate, Orderbook, Volume24h, PositionSide, OrderbookLevel
+
+
+@runtime_checkable
+class OrderbookProvider(Protocol):
+  def get_orderbook(self, symbol: str) -> Orderbook | None: ...
+  
+  def get_best_bid(self, symbol: str) -> OrderbookLevel | None: ...
+  
+  def get_best_ask(self, symbol: str) -> OrderbookLevel | None: ...
+  
+  def has_orderbook(self, symbol: str) -> bool: ...
 
 
 @runtime_checkable
