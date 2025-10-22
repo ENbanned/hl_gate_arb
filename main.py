@@ -22,8 +22,17 @@ async def main():
           limit=1
         )
       print("GATE FUNDING:")
-      print(gate_funding)
       print(gate_funding[0].to_dict() if gate_funding else "Empty")
+
+      hl_meta = await asyncio.to_thread(
+        hyperliquid_client.info.meta_and_asset_ctxs
+      )
+      meta, asset_ctxs = hl_meta
+      print("\nHYPERLIQUID META (ищем funding):")
+      for i, asset in enumerate(meta["universe"]):
+          if asset["name"] == "BTC":
+              ctx = asset_ctxs[i]
+              print(ctx)
       # gate_open_positions = await gate.get_positions()
       # hyperliquid_open_positions = await hyperliquid.get_positions()
 
