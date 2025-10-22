@@ -1,4 +1,5 @@
 import asyncio
+import time
 from typing import Any
 from decimal import Decimal
 
@@ -8,12 +9,13 @@ from gate_api.exceptions import GateApiException
 
 from ..common.exceptions import InvalidSymbolError, OrderError
 from ..common.models import Balance, FundingRate, Order, Orderbook, Position, PositionSide, SymbolInfo, Volume24h
+from ..common.logging import get_logger
 from .adapters import adapt_balance, adapt_funding_rate, adapt_order, adapt_orderbook, adapt_position, adapt_symbol_info, adapt_volume_24h
 from .price_monitor import GatePriceMonitor
 from .orderbook_monitor import GateOrderbookMonitor
 
 
-__all__ = ['GateClient']
+logger = get_logger(__name__)
 
 
 class GateClient:
@@ -23,6 +25,7 @@ class GateClient:
     'settle',
     'dual_mode',
     'contracts_cache_interval',
+    'leverage_cache_ttl',
     'config',
     'client',
     'futures_api',
@@ -30,6 +33,7 @@ class GateClient:
     'orderbook_monitor',
     'contracts_meta',
     '_leverage_cache',
+    '_leverage_cache_time',
     '_update_task',
     '_shutdown'
   )
@@ -41,13 +45,15 @@ class GateClient:
     settle: str = 'usdt',
     dual_mode: bool = False,
     host: str = 'https://api.gateio.ws/api/v4',
-    contracts_cache_interval: int = 300
+    contracts_cache_interval: int = 300,
+    leverage_cache_ttl: int = 3600
   ):
     self.api_key = api_key
     self.api_secret = api_secret
     self.settle = settle
     self.dual_mode = dual_mode
     self.contracts_cache_interval = contracts_cache_interval
+    self.leverage_cache_ttl = leverage_cache_ttl
     
     self.config = Configuration(host=host, key=api_key, secret=api_secret)
     self.client = ApiClient(self.config)
@@ -56,27 +62,31 @@ class GateClient:
     self.price_monitor = GatePriceMonitor(settle)
     self.orderbook_monitor = GateOrderbookMonitor(settle, self.futures_api)
     self.contracts_meta: dict[str, Any] = {}
-    self._leverage_cache: dict[str, int] = {}
+    self._leverage_cache: dict[str, tuple[int, float]] = {}
     self._update_task = None
     self._shutdown = asyncio.Event()
 
 
   async def __aenter__(self):
+    logger.info("gate_client_starting")
     await self._init_setup()
     contracts = list(self.contracts_meta.keys())
     await self.price_monitor.start(contracts)
     await self.orderbook_monitor.start(contracts)
+    logger.info("gate_client_started", contracts=len(contracts))
     return self
 
 
   async def __aexit__(self, exc_type, exc_val, exc_tb):
+    logger.info("gate_client_stopping")
     self._shutdown.set()
     if self._update_task:
       await self._update_task
-    self.price_monitor.stop()
-    self.orderbook_monitor.stop()
+    await self.price_monitor.stop()
+    await self.orderbook_monitor.stop()
     if self.client:
       self.client.close()
+    logger.info("gate_client_stopped")
 
 
   async def _init_setup(self) -> None:
@@ -86,16 +96,21 @@ class GateClient:
 
 
   async def _refresh_contracts(self) -> None:
-    contracts = await asyncio.to_thread(
-      self.futures_api.list_futures_contracts,
-      self.settle
-    )
-    
-    cache = {}
-    for contract in contracts:
-      cache[contract.name] = contract.to_dict()
-    
-    self.contracts_meta = cache
+    try:
+      contracts = await asyncio.to_thread(
+        self.futures_api.list_futures_contracts,
+        self.settle
+      )
+      
+      cache = {}
+      for contract in contracts:
+        cache[contract.name] = contract.to_dict()
+      
+      self.contracts_meta = cache
+      logger.info("contracts_refreshed", count=len(cache))
+    except GateApiException as ex:
+      logger.error("contracts_refresh_error", error=ex.message)
+      raise
 
 
   async def _set_position_mode(self) -> None:
@@ -123,8 +138,10 @@ class GateClient:
           self.settle,
           self.dual_mode
         )
+        logger.info("position_mode_set", dual_mode=self.dual_mode)
     except GateApiException as ex:
       if ex.label != "USER_NOT_FOUND":
+        logger.error("position_mode_error", error=ex.message)
         raise RuntimeError(f"Failed to set position mode: {ex.message}") from ex
 
 
@@ -146,8 +163,11 @@ class GateClient:
   async def set_leverage(self, symbol: str, leverage: int) -> None:
     contract = self._symbol_to_contract(symbol)
     
-    if self._leverage_cache.get(contract) == leverage:
-      return
+    cached = self._leverage_cache.get(contract)
+    if cached:
+      cached_lev, cached_time = cached
+      if cached_lev == leverage and (time.time() - cached_time) < self.leverage_cache_ttl:
+        return
     
     try:
       await asyncio.to_thread(
@@ -156,8 +176,10 @@ class GateClient:
         contract,
         str(leverage)
       )
-      self._leverage_cache[contract] = leverage
+      self._leverage_cache[contract] = (leverage, time.time())
+      logger.info("leverage_set", symbol=symbol, leverage=leverage)
     except GateApiException as ex:
+      logger.error("leverage_set_error", symbol=symbol, error=ex.message)
       raise OrderError(f"Failed to set leverage for {symbol}: {ex.message}") from ex
 
 
@@ -190,8 +212,11 @@ class GateClient:
         self.settle,
         order
       )
-      return adapt_order(raw.to_dict())
+      result = adapt_order(raw.to_dict())
+      logger.info("buy_market_success", symbol=symbol, size=size, fill_price=result.fill_price)
+      return result
     except GateApiException as ex:
+      logger.error("buy_market_error", symbol=symbol, error=ex.message)
       raise OrderError(f"Failed to buy market: {ex.message}") from ex
 
 
@@ -211,8 +236,11 @@ class GateClient:
         self.settle,
         order
       )
-      return adapt_order(raw.to_dict())
+      result = adapt_order(raw.to_dict())
+      logger.info("sell_market_success", symbol=symbol, size=size, fill_price=result.fill_price)
+      return result
     except GateApiException as ex:
+      logger.error("sell_market_error", symbol=symbol, error=ex.message)
       raise OrderError(f"Failed to sell market: {ex.message}") from ex
 
 
@@ -231,6 +259,7 @@ class GateClient:
       
       return positions
     except GateApiException as ex:
+      logger.error("get_positions_error", error=ex.message)
       raise OrderError(f"Failed to get positions: {ex.message}") from ex
 
 
@@ -242,7 +271,9 @@ class GateClient:
       )
       return adapt_balance(account.to_dict())
     except GateApiException as ex:
+      logger.error("get_balance_error", error=ex.message)
       raise OrderError(f"Failed to get balance: {ex.message}") from ex
+
 
   async def get_funding_rate(self, symbol: str) -> FundingRate:
     contract = self._symbol_to_contract(symbol)
@@ -260,6 +291,7 @@ class GateClient:
       
       return adapt_funding_rate(raw[0].to_dict(), symbol)
     except GateApiException as ex:
+      logger.error("get_funding_rate_error", symbol=symbol, error=ex.message)
       raise OrderError(f"Failed to get funding rate for {symbol}: {ex.message}") from ex
 
 
@@ -275,6 +307,7 @@ class GateClient:
       )
       return adapt_orderbook(raw.to_dict(), symbol)
     except GateApiException as ex:
+      logger.error("get_orderbook_error", symbol=symbol, error=ex.message)
       raise OrderError(f"Failed to get orderbook for {symbol}: {ex.message}") from ex
 
 
@@ -293,6 +326,7 @@ class GateClient:
       
       return adapt_volume_24h(raw[0].to_dict(), symbol)
     except GateApiException as ex:
+      logger.error("get_24h_volume_error", symbol=symbol, error=ex.message)
       raise OrderError(f"Failed to get 24h volume for {symbol}: {ex.message}") from ex
 
 
