@@ -1,5 +1,6 @@
 import asyncio
 from typing import Any
+from decimal import Decimal
 
 import eth_account
 from eth_account.signers.local import LocalAccount
@@ -7,8 +8,8 @@ from hyperliquid.exchange import Exchange
 from hyperliquid.info import Info
 
 from ..common.exceptions import OrderError
-from ..common.models import Balance, Order, Position, PositionSide, SymbolInfo
-from .adapters import adapt_balance, adapt_order, adapt_position, adapt_symbol_info
+from ..common.models import Balance, FundingRate, Order, Orderbook, Position, PositionSide, SymbolInfo, Volume24h
+from .adapters import adapt_balance, adapt_funding_rate, adapt_order, adapt_orderbook, adapt_position, adapt_symbol_info, adapt_volume_24h
 from .price_monitor import HyperliquidPriceMonitor
 
 
@@ -185,3 +186,67 @@ class HyperliquidClient:
       return adapt_balance(state)
     except Exception as ex:
       raise OrderError(f"Failed to get balance: {str(ex)}") from ex
+
+
+  async def get_funding_rate(self, symbol: str) -> FundingRate:
+    try:
+      meta, asset_ctxs = await asyncio.to_thread(self.info.meta_and_asset_ctxs)
+      
+      for i, asset in enumerate(meta['universe']):
+        if asset['name'] == symbol:
+          ctx = asset_ctxs[i]
+          return adapt_funding_rate(ctx, symbol)
+      
+      raise OrderError(f"Symbol {symbol} not found")
+    except Exception as ex:
+      raise OrderError(f"Failed to get funding rate for {symbol}: {str(ex)}") from ex
+
+
+  async def get_orderbook(self, symbol: str, depth: int = 20) -> Orderbook:
+    try:
+      raw = await asyncio.to_thread(self.info.l2_snapshot, symbol)
+      
+      book = adapt_orderbook(raw)
+      
+      book.bids = book.bids[:depth]
+      book.asks = book.asks[:depth]
+      
+      return book
+    except Exception as ex:
+      raise OrderError(f"Failed to get orderbook for {symbol}: {str(ex)}") from ex
+
+
+  async def get_24h_volume(self, symbol: str) -> Volume24h:
+    try:
+      meta, asset_ctxs = await asyncio.to_thread(self.info.meta_and_asset_ctxs)
+      
+      for i, asset in enumerate(meta['universe']):
+        if asset['name'] == symbol:
+          ctx = asset_ctxs[i]
+          return adapt_volume_24h(ctx, symbol)
+      
+      raise OrderError(f"Symbol {symbol} not found")
+    except Exception as ex:
+      raise OrderError(f"Failed to get 24h volume for {symbol}: {str(ex)}") from ex
+
+
+  async def estimate_fill_price(self, symbol: str, size: float, side: PositionSide) -> Decimal:
+    book = await self.get_orderbook(symbol, depth=50)
+    
+    levels = book.asks if side == PositionSide.LONG else book.bids
+    
+    remaining = Decimal(str(abs(size)))
+    total_cost = Decimal('0')
+    
+    for level in levels:
+      if remaining <= 0:
+        break
+      
+      fill = min(remaining, level.size)
+      total_cost += fill * level.price
+      remaining -= fill
+    
+    if remaining > 0:
+      raise OrderError(f"Insufficient liquidity for {size} {symbol}")
+    
+    return total_cost / Decimal(str(abs(size)))

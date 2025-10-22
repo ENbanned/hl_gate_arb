@@ -1,7 +1,7 @@
 from decimal import Decimal
 from typing import Any
 
-from ..common.models import Balance, Order, OrderStatus, Position, PositionSide, SymbolInfo
+from ..common.models import Balance, FundingRate, Order, Orderbook, OrderbookLevel, OrderStatus, Position, PositionSide, SymbolInfo, Volume24h
 
 
 def adapt_position(raw: dict[str, Any]) -> Position:
@@ -102,4 +102,42 @@ def adapt_symbol_info(raw: dict[str, Any]) -> SymbolInfo:
     symbol=raw['name'],
     max_leverage=int(raw['max_leverage']),
     sz_decimals=int(raw['sz_decimals']),
+  )
+
+
+def adapt_funding_rate(raw: dict[str, Any], symbol: str) -> FundingRate:
+  return FundingRate(
+    symbol=symbol,
+    rate=Decimal(raw['funding']),
+    timestamp=int(raw.get('time', 0))
+  )
+
+
+def adapt_orderbook(raw: dict[str, Any]) -> Orderbook:
+  levels = raw['levels']
+  bids_raw = levels[0]
+  asks_raw = levels[1]
+  
+  bids = [
+    OrderbookLevel(price=Decimal(level['px']), size=Decimal(level['sz']))
+    for level in bids_raw
+  ]
+  asks = [
+    OrderbookLevel(price=Decimal(level['px']), size=Decimal(level['sz']))
+    for level in asks_raw
+  ]
+  
+  return Orderbook(
+    symbol=raw['coin'],
+    bids=bids,
+    asks=asks,
+    timestamp=raw['time']
+  )
+
+
+def adapt_volume_24h(raw: dict[str, Any], symbol: str) -> Volume24h:
+  return Volume24h(
+    symbol=symbol,
+    base_volume=Decimal(raw['dayBaseVlm']),
+    quote_volume=Decimal(raw['dayNtlVlm'])
   )

@@ -1,6 +1,6 @@
 import asyncio
 
-from src.exchanges.common import ExchangeClient, Position
+from src.exchanges.common import ExchangeClient
 from src.exchanges.gate import GateClient
 from src.exchanges.hyperliquid import HyperliquidClient
 
@@ -15,28 +15,10 @@ async def main():
       gate: ExchangeClient = gate_client
       hyperliquid: ExchangeClient = hyperliquid_client
 
-      hl_meta = await asyncio.to_thread(
-        hyperliquid_client.info.meta_and_asset_ctxs
-      )
-      meta, asset_ctxs = hl_meta
-      for i, asset in enumerate(meta["universe"]):
-          if asset["name"] == "BTC":
-              ctx = asset_ctxs[i]
+      gate_book = await gate.get_orderbook('ENA')
+      hyperliquid_book = await hyperliquid.get_orderbook('ENA')
 
-      try:
-        gate_stats = await asyncio.to_thread(
-          gate_client.futures_api.list_futures_tickers,
-          gate_client.settle,
-          contract='BTC_USDT'
-        )
-        print("\nGATE 24H STATS:")
-        print(gate_stats[0].to_dict() if gate_stats else "Empty")
-      except Exception as e:
-        print(f"Gate stats error: {e}")
+      print(gate_book)
       
-      # Hyperliquid 24h volume (из asset_ctxs который уже есть)
-      print("\nHYPERLIQUID 24H VOLUME (из ctx выше):")
-      print(f"dayNtlVlm: {ctx.get('dayNtlVlm')}")
-      print(f"dayBaseVlm: {ctx.get('dayBaseVlm')}")
 
 asyncio.run(main())

@@ -1,13 +1,14 @@
 import asyncio
 from typing import Any
+from decimal import Decimal
 
 import gate_api
 from gate_api import ApiClient, Configuration, FuturesApi, FuturesOrder
 from gate_api.exceptions import GateApiException
 
 from ..common.exceptions import InvalidSymbolError, OrderError
-from ..common.models import Balance, Order, Position, SymbolInfo
-from .adapters import adapt_balance, adapt_order, adapt_position, adapt_symbol_info
+from ..common.models import Balance, FundingRate, Order, Orderbook, Position, PositionSide, SymbolInfo, Volume24h
+from .adapters import adapt_balance, adapt_funding_rate, adapt_order, adapt_orderbook, adapt_position, adapt_symbol_info, adapt_volume_24h
 from .price_monitor import GatePriceMonitor
 
 
@@ -238,75 +239,75 @@ class GateClient:
     except GateApiException as ex:
       raise OrderError(f"Failed to get balance: {ex.message}") from ex
 
-async def get_funding_rate(self, symbol: str) -> FundingRate:
-  contract = self._symbol_to_contract(symbol)
-  
-  try:
-    raw = await asyncio.to_thread(
-      self.futures_api.list_futures_funding_rate_history,
-      self.settle,
-      contract,
-      limit=1
-    )
+  async def get_funding_rate(self, symbol: str) -> FundingRate:
+    contract = self._symbol_to_contract(symbol)
     
-    if not raw:
-      raise OrderError(f"No funding rate data for {symbol}")
+    try:
+      raw = await asyncio.to_thread(
+        self.futures_api.list_futures_funding_rate_history,
+        self.settle,
+        contract,
+        limit=1
+      )
+      
+      if not raw:
+        raise OrderError(f"No funding rate data for {symbol}")
+      
+      return adapt_funding_rate(raw[0].to_dict(), symbol)
+    except GateApiException as ex:
+      raise OrderError(f"Failed to get funding rate for {symbol}: {ex.message}") from ex
+
+
+  async def get_orderbook(self, symbol: str, depth: int = 20) -> Orderbook:
+    contract = self._symbol_to_contract(symbol)
     
-    return adapt_funding_rate(raw[0].to_dict(), symbol)
-  except GateApiException as ex:
-    raise OrderError(f"Failed to get funding rate for {symbol}: {ex.message}") from ex
+    try:
+      raw = await asyncio.to_thread(
+        self.futures_api.list_futures_order_book,
+        self.settle,
+        contract,
+        limit=depth
+      )
+      return adapt_orderbook(raw.to_dict(), symbol)
+    except GateApiException as ex:
+      raise OrderError(f"Failed to get orderbook for {symbol}: {ex.message}") from ex
 
 
-async def get_orderbook(self, symbol: str, depth: int = 20) -> Orderbook:
-  contract = self._symbol_to_contract(symbol)
-  
-  try:
-    raw = await asyncio.to_thread(
-      self.futures_api.list_futures_order_book,
-      self.settle,
-      contract,
-      limit=depth
-    )
-    return adapt_orderbook(raw.to_dict(), symbol)
-  except GateApiException as ex:
-    raise OrderError(f"Failed to get orderbook for {symbol}: {ex.message}") from ex
-
-
-async def get_24h_volume(self, symbol: str) -> Volume24h:
-  contract = self._symbol_to_contract(symbol)
-  
-  try:
-    raw = await asyncio.to_thread(
-      self.futures_api.list_futures_tickers,
-      self.settle,
-      contract=contract
-    )
+  async def get_24h_volume(self, symbol: str) -> Volume24h:
+    contract = self._symbol_to_contract(symbol)
     
-    if not raw:
-      raise OrderError(f"No ticker data for {symbol}")
-    
-    return adapt_volume_24h(raw[0].to_dict(), symbol)
-  except GateApiException as ex:
-    raise OrderError(f"Failed to get 24h volume for {symbol}: {ex.message}") from ex
+    try:
+      raw = await asyncio.to_thread(
+        self.futures_api.list_futures_tickers,
+        self.settle,
+        contract=contract
+      )
+      
+      if not raw:
+        raise OrderError(f"No ticker data for {symbol}")
+      
+      return adapt_volume_24h(raw[0].to_dict(), symbol)
+    except GateApiException as ex:
+      raise OrderError(f"Failed to get 24h volume for {symbol}: {ex.message}") from ex
 
 
-async def estimate_fill_price(self, symbol: str, size: float, side: PositionSide) -> Decimal:
-  book = await self.get_orderbook(symbol, depth=50)
-  
-  levels = book.asks if side == PositionSide.LONG else book.bids
-  
-  remaining = Decimal(str(abs(size)))
-  total_cost = Decimal('0')
-  
-  for level in levels:
-    if remaining <= 0:
-      break
+  async def estimate_fill_price(self, symbol: str, size: float, side: PositionSide) -> Decimal:
+    book = await self.get_orderbook(symbol, depth=50)
     
-    fill = min(remaining, level.size)
-    total_cost += fill * level.price
-    remaining -= fill
-  
-  if remaining > 0:
-    raise OrderError(f"Insufficient liquidity for {size} {symbol}")
-  
-  return total_cost / Decimal(str(abs(size)))
+    levels = book.asks if side == PositionSide.LONG else book.bids
+    
+    remaining = Decimal(str(abs(size)))
+    total_cost = Decimal('0')
+    
+    for level in levels:
+      if remaining <= 0:
+        break
+      
+      fill = min(remaining, level.size)
+      total_cost += fill * level.price
+      remaining -= fill
+    
+    if remaining > 0:
+      raise OrderError(f"Insufficient liquidity for {size} {symbol}")
+    
+    return total_cost / Decimal(str(abs(size)))
