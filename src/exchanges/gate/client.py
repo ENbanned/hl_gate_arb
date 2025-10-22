@@ -237,3 +237,76 @@ class GateClient:
       return adapt_balance(account.to_dict())
     except GateApiException as ex:
       raise OrderError(f"Failed to get balance: {ex.message}") from ex
+
+async def get_funding_rate(self, symbol: str) -> FundingRate:
+  contract = self._symbol_to_contract(symbol)
+  
+  try:
+    raw = await asyncio.to_thread(
+      self.futures_api.list_futures_funding_rate_history,
+      self.settle,
+      contract,
+      limit=1
+    )
+    
+    if not raw:
+      raise OrderError(f"No funding rate data for {symbol}")
+    
+    return adapt_funding_rate(raw[0].to_dict(), symbol)
+  except GateApiException as ex:
+    raise OrderError(f"Failed to get funding rate for {symbol}: {ex.message}") from ex
+
+
+async def get_orderbook(self, symbol: str, depth: int = 20) -> Orderbook:
+  contract = self._symbol_to_contract(symbol)
+  
+  try:
+    raw = await asyncio.to_thread(
+      self.futures_api.list_futures_order_book,
+      self.settle,
+      contract,
+      limit=depth
+    )
+    return adapt_orderbook(raw.to_dict(), symbol)
+  except GateApiException as ex:
+    raise OrderError(f"Failed to get orderbook for {symbol}: {ex.message}") from ex
+
+
+async def get_24h_volume(self, symbol: str) -> Volume24h:
+  contract = self._symbol_to_contract(symbol)
+  
+  try:
+    raw = await asyncio.to_thread(
+      self.futures_api.list_futures_tickers,
+      self.settle,
+      contract=contract
+    )
+    
+    if not raw:
+      raise OrderError(f"No ticker data for {symbol}")
+    
+    return adapt_volume_24h(raw[0].to_dict(), symbol)
+  except GateApiException as ex:
+    raise OrderError(f"Failed to get 24h volume for {symbol}: {ex.message}") from ex
+
+
+async def estimate_fill_price(self, symbol: str, size: float, side: PositionSide) -> Decimal:
+  book = await self.get_orderbook(symbol, depth=50)
+  
+  levels = book.asks if side == PositionSide.LONG else book.bids
+  
+  remaining = Decimal(str(abs(size)))
+  total_cost = Decimal('0')
+  
+  for level in levels:
+    if remaining <= 0:
+      break
+    
+    fill = min(remaining, level.size)
+    total_cost += fill * level.price
+    remaining -= fill
+  
+  if remaining > 0:
+    raise OrderError(f"Insufficient liquidity for {size} {symbol}")
+  
+  return total_cost / Decimal(str(abs(size)))

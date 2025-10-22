@@ -15,131 +15,28 @@ async def main():
       gate: ExchangeClient = gate_client
       hyperliquid: ExchangeClient = hyperliquid_client
 
-      gate_funding = await asyncio.to_thread(
-          gate_client.futures_api.list_futures_funding_rate_history,
-          gate_client.settle,
-          'BTC_USDT',
-          limit=1
-        )
-      print("GATE FUNDING:")
-      print(gate_funding[0].to_dict() if gate_funding else "Empty")
-
       hl_meta = await asyncio.to_thread(
         hyperliquid_client.info.meta_and_asset_ctxs
       )
       meta, asset_ctxs = hl_meta
-      print("\nHYPERLIQUID META (ищем funding):")
       for i, asset in enumerate(meta["universe"]):
           if asset["name"] == "BTC":
               ctx = asset_ctxs[i]
-              print(ctx)
-      # gate_open_positions = await gate.get_positions()
-      # hyperliquid_open_positions = await hyperliquid.get_positions()
 
-      # print(f'Gate positions before: {gate_open_positions}')
-      # print(f'Hyperliquid positions before: {hyperliquid_open_positions}')
-
-      # open_gate = await gate.buy_market('ENA', 100)
-      # print(f'GATE LONG 100 ENA: {open_gate}')
-
-      # open_hyperliquid = await hyperliquid.buy_market('ENA', 100)
-      # print(f'HYPERLIQUID LONG 100 ENA: {open_hyperliquid}')
-
-      # gate_open_positions = await gate.get_positions()
-      # hyperliquid_open_positions = await hyperliquid.get_positions()
-
-      # print(f'Gate positions after: {gate_open_positions}')
-      # print(f'Hyperliquid positions after: {hyperliquid_open_positions}')
-
-      # gate_close = await gate.sell_market('ENA', 100)
-      # print(f'GATE CLOSE LONG 100 ENA: {gate_close}')
-
-      # hyperliquid_close = await hyperliquid.sell_market('ENA', 100)
-      # print(f'HYPERLIQUID CLOSE LONG 100 ENA: {hyperliquid_close}')
-
-      # gate_open_positions = await gate.get_positions()
-      # hyperliquid_open_positions = await hyperliquid.get_positions()
-
-      # print(f'Gate positions at the end: {gate_open_positions}')
-      # print(f'Hyperliquid positions at the end: {hyperliquid_open_positions}')
-
-  
-"""
-
-Gate positions before: []
-Hyperliquid positions before: []
-
-GATE LONG 100 ENA: 
-order_id='61643020747359378' 
-coin='ENA' size=Decimal('10') 
-side=<PositionSide.LONG: 'long'> 
-fill_price=Decimal('0.4314') 
-status=<OrderStatus.FILLED: 'filled'> 
-fee=Decimal('0.002070720')
-
-HYPERLIQUID LONG 100 ENA: 
-order_id='209446386207' 
-coin='ENA' size=Decimal('100.0') 
-side=<PositionSide.LONG: 'long'> 
-fill_price=Decimal('0.43104') 
-status=<OrderStatus.FILLED: 'filled'> 
-fee=Decimal('0')
-
-Gate positions after: 
-[
-  Position(
-    coin='ENA', 
-    size=Decimal('10'), 
-    side=<PositionSide.LONG: 'long'>, 
-    entry_price=Decimal('0.4314'), 
-    mark_price=Decimal('0.4314'), 
-    unrealized_pnl=Decimal('0'), 
-    liquidation_price=None, 
-    margin_used=Decimal('0'), 
-    leverage=None
-  )
-]
-Hyperliquid positions after: 
-[
-  Position(
-    coin='ENA', 
-    size=Decimal('100.0'), 
-    side=<PositionSide.LONG: 'long'>, 
-    entry_price=Decimal('0.43104'), 
-    mark_price=Decimal('0.43104'), 
-    unrealized_pnl=Decimal('0.002'), 
-    liquidation_price=Decimal('0.3631852211'), 
-    margin_used=Decimal('8.603404'), 
-    leverage=5
-  )
-]
-
-GATE CLOSE LONG 100 ENA: 
-order_id='61643020747359438' 
-coin='ENA' size=Decimal('10') 
-side=<PositionSide.SHORT: 'short'> 
-fill_price=Decimal('0.4314') 
-status=<OrderStatus.FILLED: 'filled'> 
-fee=Decimal('0.002070720')
-
-HYPERLIQUID CLOSE LONG 100 ENA: 
-order_id='209446401177' 
-coin='ENA' 
-size=Decimal('100.0') 
-side=<PositionSide.SHORT: 'short'> 
-fill_price=Decimal('0.431') 
-status=<OrderStatus.FILLED: 'filled'> 
-fee=Decimal('0')
-
-Gate positions at the end: []
-Hyperliquid positions at the end: []
-
-
-"""
-
-
-
-
-
+      try:
+        gate_stats = await asyncio.to_thread(
+          gate_client.futures_api.list_futures_tickers,
+          gate_client.settle,
+          contract='BTC_USDT'
+        )
+        print("\nGATE 24H STATS:")
+        print(gate_stats[0].to_dict() if gate_stats else "Empty")
+      except Exception as e:
+        print(f"Gate stats error: {e}")
+      
+      # Hyperliquid 24h volume (из asset_ctxs который уже есть)
+      print("\nHYPERLIQUID 24H VOLUME (из ctx выше):")
+      print(f"dayNtlVlm: {ctx.get('dayNtlVlm')}")
+      print(f"dayBaseVlm: {ctx.get('dayBaseVlm')}")
 
 asyncio.run(main())

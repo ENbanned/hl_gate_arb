@@ -1,6 +1,7 @@
 from typing import Protocol, runtime_checkable
+from decimal import Decimal
 
-from .models import Balance, Order, Position, SymbolInfo
+from .models import Balance, Order, Position, SymbolInfo, FundingRate, Orderbook, Volume24h, PositionSide
 
 
 @runtime_checkable
@@ -32,3 +33,11 @@ class ExchangeClient(Protocol):
   async def set_leverages(self, leverages: dict[str, int]) -> None: ...
   
   def get_symbol_info(self, symbol: str) -> SymbolInfo | None: ...
+
+  async def get_funding_rate(self, symbol: str) -> FundingRate: ...
+
+  async def get_orderbook(self, symbol: str, depth: int = 20) -> Orderbook: ...
+
+  async def get_24h_volume(self, symbol: str) -> Volume24h: ...
+
+  async def estimate_fill_price(self, symbol: str, size: float, side: PositionSide) -> Decimal: ...

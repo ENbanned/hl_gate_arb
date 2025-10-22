@@ -47,3 +47,27 @@ class SymbolInfo(BaseModel):
   symbol: str
   max_leverage: int
   sz_decimals: int
+
+
+class OrderbookLevel(BaseModel):
+  price: Decimal
+  size: Decimal
+
+
+class Orderbook(BaseModel):
+  symbol: str
+  bids: list[OrderbookLevel]
+  asks: list[OrderbookLevel]
+  timestamp: int
+
+
+class FundingRate(BaseModel):
+  symbol: str
+  rate: Decimal
+  timestamp: int
+
+
+class Volume24h(BaseModel):
+  symbol: str
+  base_volume: Decimal
+  quote_volume: Decimal

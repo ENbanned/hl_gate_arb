@@ -16,4 +16,8 @@ __all__ = [
   'InsufficientBalanceError',
   'InvalidSymbolError',
   'OrderError',
+  'Orderbook',
+  'OrderbookLevel', 
+  'FundingRate',
+  'Volume24h',
 ]

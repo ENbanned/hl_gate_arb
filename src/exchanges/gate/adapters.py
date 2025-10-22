@@ -1,7 +1,7 @@
 from decimal import Decimal
 from typing import Any
 
-from ..common.models import Balance, Order, OrderStatus, Position, PositionSide, SymbolInfo
+from ..common.models import Balance, Order, OrderStatus, Position, PositionSide, SymbolInfo, FundingRate, Orderbook, Volume24h, PositionSide, OrderbookLevel
 
 
 def adapt_position(raw: dict[str, Any]) -> Position | None:
@@ -78,4 +78,37 @@ def adapt_symbol_info(raw: dict[str, Any], symbol: str) -> SymbolInfo:
     symbol=symbol,
     max_leverage=int(raw.get('leverage_max', 1)),
     sz_decimals=0,
+  )
+
+def adapt_funding_rate(raw: dict[str, Any], symbol: str) -> FundingRate:
+  return FundingRate(
+    symbol=symbol,
+    rate=Decimal(raw['r']),
+    timestamp=raw['t']
+  )
+
+
+def adapt_orderbook(raw: dict[str, Any], symbol: str) -> Orderbook:
+  bids = [
+    OrderbookLevel(price=Decimal(level['p']), size=Decimal(str(level['s'])))
+    for level in raw['bids']
+  ]
+  asks = [
+    OrderbookLevel(price=Decimal(level['p']), size=Decimal(str(level['s'])))
+    for level in raw['asks']
+  ]
+  
+  return Orderbook(
+    symbol=symbol,
+    bids=bids,
+    asks=asks,
+    timestamp=int(raw['current'] * 1000)
+  )
+
+
+def adapt_volume_24h(raw: dict[str, Any], symbol: str) -> Volume24h:
+  return Volume24h(
+    symbol=symbol,
+    base_volume=Decimal(raw['volume_24h_base']),
+    quote_volume=Decimal(raw['volume_24h_settle'])
   )
