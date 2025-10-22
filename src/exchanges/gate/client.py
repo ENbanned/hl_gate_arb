@@ -297,12 +297,19 @@ class GateClient:
 
 
   async def estimate_fill_price(self, symbol: str, size: float, side: PositionSide, depth: int = 100) -> Decimal:
-    book = await self.get_orderbook(symbol, depth=depth)
+    book = self.orderbook_monitor.get_orderbook(symbol)
+    
+    if not book:
+      book = await self.get_orderbook(symbol, depth=min(depth, 50))
     
     levels = book.asks if side == PositionSide.LONG else book.bids
     
+    if not levels:
+      raise OrderError(f"No orderbook data for {symbol}")
+    
     remaining = Decimal(str(abs(size)))
     total_cost = Decimal('0')
+    filled = Decimal('0')
     
     for level in levels:
       if remaining <= 0:
@@ -310,9 +317,15 @@ class GateClient:
       
       fill = min(remaining, level.size)
       total_cost += fill * level.price
+      filled += fill
       remaining -= fill
     
     if remaining > 0:
-      raise OrderError(f"Insufficient liquidity for {size} {symbol}")
+      last_level = levels[-1]
+      slippage_factor = Decimal('1.005') if side == PositionSide.LONG else Decimal('0.995')
+      extrapolated_price = last_level.price * slippage_factor
+      
+      total_cost += remaining * extrapolated_price
+      filled += remaining
     
-    return total_cost / Decimal(str(abs(size)))
+    return total_cost / filled
