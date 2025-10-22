@@ -1,5 +1,4 @@
 import asyncio
-import time
 from typing import Any
 from decimal import Decimal
 
@@ -10,13 +9,12 @@ from hyperliquid.info import Info
 
 from ..common.exceptions import OrderError
 from ..common.models import Balance, FundingRate, Order, Orderbook, Position, PositionSide, SymbolInfo, Volume24h
-from ..common.logging import get_logger
 from .adapters import adapt_balance, adapt_funding_rate, adapt_order, adapt_orderbook, adapt_position, adapt_symbol_info, adapt_volume_24h
 from .price_monitor import HyperliquidPriceMonitor
 from .orderbook_monitor import HyperliquidOrderbookMonitor
 
 
-logger = get_logger(__name__)
+__all__ = ['HyperliquidClient']
 
 
 class HyperliquidClient:
@@ -24,7 +22,6 @@ class HyperliquidClient:
     'secret_key',
     'account_address', 
     'meta_update_interval',
-    'leverage_cache_ttl',
     'info',
     'exchange',
     'price_monitor',
@@ -41,13 +38,11 @@ class HyperliquidClient:
     secret_key: str, 
     account_address: str, 
     base_url: str | None = None, 
-    meta_update_interval: int = 300,
-    leverage_cache_ttl: int = 3600
+    meta_update_interval: int = 300
   ):
     self.secret_key = secret_key
     self.account_address = account_address
     self.meta_update_interval = meta_update_interval
-    self.leverage_cache_ttl = leverage_cache_ttl
     
     self._account: LocalAccount = eth_account.Account.from_key(secret_key)
     self.info = Info(base_url=base_url, skip_ws=False)
@@ -58,7 +53,7 @@ class HyperliquidClient:
     )
     
     self.assets_meta: dict[str, dict[str, Any]] = {}
-    self._leverage_cache: dict[str, tuple[int, float]] = {}
+    self._leverage_cache: dict[str, int] = {}
     self._update_task = None
     self._shutdown = asyncio.Event()
     
@@ -67,7 +62,6 @@ class HyperliquidClient:
 
 
   async def __aenter__(self):
-    logger.info("hyperliquid_client_starting")
     await self._refresh_meta()
     self._update_task = asyncio.create_task(self._meta_updater())
     
@@ -75,39 +69,31 @@ class HyperliquidClient:
 
     await self.price_monitor.start()
     await self.orderbook_monitor.start(symbols)
-    logger.info("hyperliquid_client_started", symbols=len(symbols))
     return self
 
 
   async def __aexit__(self, exc_type, exc_val, exc_tb):
-    logger.info("hyperliquid_client_stopping")
     self._shutdown.set()
     if self._update_task:
       await self._update_task
     
     if self.info.ws_manager:
       self.info.disconnect_websocket()
-    logger.info("hyperliquid_client_stopped")
 
 
   async def _refresh_meta(self) -> None:
-    try:
-      meta, _ = await asyncio.to_thread(self.info.meta_and_asset_ctxs)
-      
-      assets = {}
-      for asset in meta.get('universe', []):
-        if not asset.get('isDelisted', False):
-          assets[asset['name']] = {
-            'name': asset['name'],
-            'max_leverage': asset['maxLeverage'],
-            'sz_decimals': asset['szDecimals'],
-          }
-      
-      self.assets_meta = assets
-      logger.info("hyperliquid_meta_refreshed", count=len(assets))
-    except Exception as e:
-      logger.error("hyperliquid_meta_refresh_error", error=str(e), exc_info=True)
-      raise
+    meta, _ = await asyncio.to_thread(self.info.meta_and_asset_ctxs)
+    
+    assets = {}
+    for asset in meta['universe']:
+      if not asset.get('isDelisted', False):
+        assets[asset['name']] = {
+          'name': asset['name'],
+          'max_leverage': asset['maxLeverage'],
+          'sz_decimals': asset['szDecimals'],
+        }
+    
+    self.assets_meta = assets
 
 
   async def _meta_updater(self) -> None:
@@ -122,11 +108,8 @@ class HyperliquidClient:
 
 
   async def set_leverage(self, symbol: str, leverage: int) -> None:
-    cached = self._leverage_cache.get(symbol)
-    if cached:
-      cached_lev, cached_time = cached
-      if cached_lev == leverage and (time.time() - cached_time) < self.leverage_cache_ttl:
-        return
+    if self._leverage_cache.get(symbol) == leverage:
+      return
     
     try:
       await asyncio.to_thread(
@@ -135,10 +118,8 @@ class HyperliquidClient:
         symbol,
         False
       )
-      self._leverage_cache[symbol] = (leverage, time.time())
-      logger.info("hyperliquid_leverage_set", symbol=symbol, leverage=leverage)
+      self._leverage_cache[symbol] = leverage
     except Exception as ex:
-      logger.error("hyperliquid_leverage_error", symbol=symbol, error=str(ex))
       raise OrderError(f"Failed to set leverage for {symbol}: {str(ex)}") from ex
 
 
@@ -164,11 +145,8 @@ class HyperliquidClient:
         None,
         slippage
       )
-      result = adapt_order(raw, symbol, size, PositionSide.LONG)
-      logger.info("hyperliquid_buy_success", symbol=symbol, size=size, fill_price=result.fill_price)
-      return result
+      return adapt_order(raw, symbol, size, PositionSide.LONG)
     except Exception as ex:
-      logger.error("hyperliquid_buy_error", symbol=symbol, error=str(ex))
       raise OrderError(f"Failed to buy market: {str(ex)}") from ex
 
 
@@ -182,11 +160,8 @@ class HyperliquidClient:
         None,
         slippage
       )
-      result = adapt_order(raw, symbol, size, PositionSide.SHORT)
-      logger.info("hyperliquid_sell_success", symbol=symbol, size=size, fill_price=result.fill_price)
-      return result
+      return adapt_order(raw, symbol, size, PositionSide.SHORT)
     except Exception as ex:
-      logger.error("hyperliquid_sell_error", symbol=symbol, error=str(ex))
       raise OrderError(f"Failed to sell market: {str(ex)}") from ex
 
 
@@ -206,7 +181,6 @@ class HyperliquidClient:
       
       return positions
     except Exception as ex:
-      logger.error("hyperliquid_get_positions_error", error=str(ex))
       raise OrderError(f"Failed to get positions: {str(ex)}") from ex
 
 
@@ -218,7 +192,6 @@ class HyperliquidClient:
       )
       return adapt_balance(state)
     except Exception as ex:
-      logger.error("hyperliquid_get_balance_error", error=str(ex))
       raise OrderError(f"Failed to get balance: {str(ex)}") from ex
 
 
@@ -226,14 +199,13 @@ class HyperliquidClient:
     try:
       meta, asset_ctxs = await asyncio.to_thread(self.info.meta_and_asset_ctxs)
       
-      for i, asset in enumerate(meta.get('universe', [])):
+      for i, asset in enumerate(meta['universe']):
         if asset['name'] == symbol:
           ctx = asset_ctxs[i]
           return adapt_funding_rate(ctx, symbol)
       
       raise OrderError(f"Symbol {symbol} not found")
     except Exception as ex:
-      logger.error("hyperliquid_funding_rate_error", symbol=symbol, error=str(ex))
       raise OrderError(f"Failed to get funding rate for {symbol}: {str(ex)}") from ex
 
 
@@ -248,7 +220,6 @@ class HyperliquidClient:
       
       return book
     except Exception as ex:
-      logger.error("hyperliquid_orderbook_error", symbol=symbol, error=str(ex))
       raise OrderError(f"Failed to get orderbook for {symbol}: {str(ex)}") from ex
 
 
@@ -256,14 +227,13 @@ class HyperliquidClient:
     try:
       meta, asset_ctxs = await asyncio.to_thread(self.info.meta_and_asset_ctxs)
       
-      for i, asset in enumerate(meta.get('universe', [])):
+      for i, asset in enumerate(meta['universe']):
         if asset['name'] == symbol:
           ctx = asset_ctxs[i]
           return adapt_volume_24h(ctx, symbol)
       
       raise OrderError(f"Symbol {symbol} not found")
     except Exception as ex:
-      logger.error("hyperliquid_volume_error", symbol=symbol, error=str(ex))
       raise OrderError(f"Failed to get 24h volume for {symbol}: {str(ex)}") from ex
 
 

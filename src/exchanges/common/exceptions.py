@@ -12,11 +12,3 @@ class InvalidSymbolError(ExchangeError):
 
 class OrderError(ExchangeError):
   pass
-
-
-class WebSocketError(ExchangeError):
-  pass
-
-
-class ConnectionError(ExchangeError):
-  pass

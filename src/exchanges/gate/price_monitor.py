@@ -1,144 +1,97 @@
 import asyncio
 import json
+import threading
 import time
 from typing import Any
 
-import websockets
-from websockets.exceptions import WebSocketException
-
-from ..common.logging import get_logger
-from ..common.exceptions import WebSocketError
+import websocket
 
 
-logger = get_logger(__name__)
+__all__ = ['GatePriceMonitor']
 
 
 class GatePriceMonitor:
-  __slots__ = (
-    'settle',
-    'ws_url',
-    '_prices',
-    '_ready',
-    '_is_ready',
-    '_ws',
-    '_ws_task',
-    '_shutdown',
-    '_reconnect_delay',
-    '_max_reconnect_delay'
-  )
+  __slots__ = ('settle', 'ws_url', '_prices', '_ready', '_loop', '_is_ready', '_ws_app', '_ws_thread')
   
   def __init__(self, settle: str = 'usdt'):
     self.settle = settle
     self.ws_url = f'wss://fx-ws.gateio.ws/v4/ws/{settle}'
     self._prices: dict[str, float] = {}
     self._ready = asyncio.Event()
+    self._loop = None
     self._is_ready = False
-    self._ws = None
-    self._ws_task = None
-    self._shutdown = asyncio.Event()
-    self._reconnect_delay = 1
-    self._max_reconnect_delay = 60
+    self._ws_app = None
+    self._ws_thread = None
 
 
-  async def _handle_message(self, msg: dict[str, Any]) -> None:
+  def _on_message(self, ws: Any, message: str) -> None:
     try:
-      channel = msg.get('channel')
+      msg = json.loads(message)
+      channel = msg['channel']
       
-      if channel != 'futures.tickers':
-        return
-      
-      event = msg.get('event')
-      
-      if event == 'update':
-        prices = self._prices
-        for ticker in msg.get('result', []):
-          contract = ticker.get('contract', '').replace('_USDT', '')
-          if contract:
-            prices[contract] = float(ticker.get('last', 0))
+      if channel == 'futures.tickers':
+        event = msg['event']
         
-        if not self._is_ready:
+        if event == 'update':
+          prices = self._prices
+          for ticker in msg['result']:
+            contract = ticker['contract'].replace('_USDT', '')
+            prices[contract] = float(ticker['last'])
+          
+          if not self._is_ready:
+            self._is_ready = True
+            self._loop.call_soon_threadsafe(self._ready.set)
+        
+        elif event == 'subscribe' and msg.get('error') is None and not self._is_ready:
           self._is_ready = True
-          self._ready.set()
-          logger.info("price_monitor_ready", symbols=len(prices))
-      
-      elif event == 'subscribe':
-        if msg.get('error') is None and not self._is_ready:
-          self._is_ready = True
-          self._ready.set()
-          logger.info("price_monitor_subscribed")
+          self._loop.call_soon_threadsafe(self._ready.set)
     
-    except (KeyError, ValueError) as e:
-      logger.warning("price_monitor_parse_error", error=str(e))
-    except Exception as e:
-      logger.error("price_monitor_handle_error", error=str(e), exc_info=True)
+    except (KeyError, ValueError, TypeError):
+      pass
 
 
-  async def _ws_loop(self, contracts: list[str]) -> None:
-    while not self._shutdown.is_set():
-      try:
-        logger.info("price_monitor_connecting", url=self.ws_url)
-        
-        async with websockets.connect(self.ws_url, ping_interval=20, ping_timeout=10) as ws:
-          self._ws = ws
-          self._reconnect_delay = 1
-          
-          subscribe_msg = {
-            'time': int(time.time()),
-            'channel': 'futures.tickers',
-            'event': 'subscribe',
-            'payload': contracts
-          }
-          
-          await ws.send(json.dumps(subscribe_msg))
-          logger.info("price_monitor_subscribe_sent", contracts=len(contracts))
-          
-          async for raw_msg in ws:
-            if self._shutdown.is_set():
-              break
-            
-            try:
-              msg = json.loads(raw_msg)
-              await self._handle_message(msg)
-            except json.JSONDecodeError as e:
-              logger.warning("price_monitor_json_error", error=str(e))
-      
-      except WebSocketException as e:
-        logger.error("price_monitor_ws_error", error=str(e))
-        if not self._shutdown.is_set():
-          await asyncio.sleep(self._reconnect_delay)
-          self._reconnect_delay = min(self._reconnect_delay * 2, self._max_reconnect_delay)
-      
-      except Exception as e:
-        logger.error("price_monitor_unexpected_error", error=str(e), exc_info=True)
-        if not self._shutdown.is_set():
-          await asyncio.sleep(self._reconnect_delay)
+  def _on_error(self, ws: Any, error: Any) -> None:
+    pass
+
+
+  def _on_close(self, ws: Any, close_status_code: Any, close_msg: Any) -> None:
+    pass
+
+
+  def _on_open(self, ws: Any, contracts: list[str]) -> None:
+    ws.send(json.dumps({
+      'time': int(time.time()),
+      'channel': 'futures.tickers',
+      'event': 'subscribe',
+      'payload': contracts
+    }))
 
 
   async def start(self, contracts: list[str]) -> None:
-    self._ws_task = asyncio.create_task(self._ws_loop(contracts))
+    self._loop = asyncio.get_running_loop()
     
-    try:
-      await asyncio.wait_for(self._ready.wait(), timeout=30)
-    except asyncio.TimeoutError:
-      logger.error("price_monitor_start_timeout")
-      raise WebSocketError("Price monitor failed to start within 30s")
+    self._ws_app = websocket.WebSocketApp(
+      self.ws_url,
+      on_message=self._on_message,
+      on_error=self._on_error,
+      on_close=self._on_close,
+      on_open=lambda ws: self._on_open(ws, contracts)
+    )
+    
+    self._ws_thread = threading.Thread(
+      target=self._ws_app.run_forever,
+      daemon=True
+    )
+    self._ws_thread.start()
+    
+    await self._ready.wait()
 
 
-  async def stop(self) -> None:
-    logger.info("price_monitor_stopping")
-    self._shutdown.set()
-    
-    if self._ws:
-      await self._ws.close()
-    
-    if self._ws_task:
-      try:
-        await asyncio.wait_for(self._ws_task, timeout=5)
-      except asyncio.TimeoutError:
-        logger.warning("price_monitor_stop_timeout")
-        self._ws_task.cancel()
-    
-    logger.info("price_monitor_stopped")
+  def stop(self) -> None:
+    if self._ws_app:
+      self._ws_app.close()
+    if self._ws_thread and self._ws_thread.is_alive():
+      self._ws_thread.join(timeout=2)
 
 
   def get_price(self, contract: str) -> float | None:
