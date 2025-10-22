@@ -41,3 +41,9 @@ class Balance(BaseModel):
   total: Decimal
   available: Decimal
   used: Decimal
+
+
+class SymbolInfo(BaseModel):
+  symbol: str
+  max_leverage: int
+  sz_decimals: int

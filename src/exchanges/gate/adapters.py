@@ -1,7 +1,7 @@
 from decimal import Decimal
 from typing import Any
 
-from ..common.models import Balance, Order, OrderStatus, Position, PositionSide
+from ..common.models import Balance, Order, OrderStatus, Position, PositionSide, SymbolInfo
 
 
 def adapt_position(raw: dict[str, Any]) -> Position | None:
@@ -21,6 +21,11 @@ def adapt_position(raw: dict[str, Any]) -> Position | None:
   leverage_str = raw.get('leverage', '0')
   leverage = int(leverage_str) if leverage_str and leverage_str != '0' else None
   
+  liq_price_str = raw.get('liq_price', '0')
+  liq_price = None
+  if liq_price_str and liq_price_str != '0':
+    liq_price = Decimal(liq_price_str)
+  
   return Position(
     coin=raw['contract'].replace('_USDT', ''),
     size=Decimal(str(abs(size))),
@@ -28,7 +33,7 @@ def adapt_position(raw: dict[str, Any]) -> Position | None:
     entry_price=Decimal(raw.get('entry_price', '0')),
     mark_price=Decimal(raw.get('mark_price', '0')),
     unrealized_pnl=Decimal(raw.get('unrealised_pnl', '0')),
-    liquidation_price=Decimal(raw['liq_price']) if raw.get('liq_price') and raw['liq_price'] != '0' else None,
+    liquidation_price=liq_price,
     margin_used=margin_used,
     leverage=leverage,
   )
@@ -65,4 +70,12 @@ def adapt_balance(raw: dict[str, Any]) -> Balance:
     total=total,
     available=available,
     used=total - available,
+  )
+
+
+def adapt_symbol_info(raw: dict[str, Any], symbol: str) -> SymbolInfo:
+  return SymbolInfo(
+    symbol=symbol,
+    max_leverage=int(raw.get('leverage_max', 1)),
+    sz_decimals=0,
   )

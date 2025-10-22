@@ -1,7 +1,7 @@
 from decimal import Decimal
 from typing import Any
 
-from ..common.models import Balance, Order, OrderStatus, Position, PositionSide
+from ..common.models import Balance, Order, OrderStatus, Position, PositionSide, SymbolInfo
 
 
 def adapt_position(raw: dict[str, Any]) -> Position:
@@ -94,4 +94,12 @@ def adapt_balance(raw: dict[str, Any]) -> Balance:
     total=total,
     available=available,
     used=total - available,
+  )
+
+
+def adapt_symbol_info(raw: dict[str, Any]) -> SymbolInfo:
+  return SymbolInfo(
+    symbol=raw['name'],
+    max_leverage=int(raw['max_leverage']),
+    sz_decimals=int(raw['sz_decimals']),
   )

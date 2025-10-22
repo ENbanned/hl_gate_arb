@@ -6,8 +6,8 @@ from gate_api import ApiClient, Configuration, FuturesApi, FuturesOrder
 from gate_api.exceptions import GateApiException
 
 from ..common.exceptions import InvalidSymbolError, OrderError
-from ..common.models import Balance, Order, Position
-from .adapters import adapt_balance, adapt_order, adapt_position
+from ..common.models import Balance, Order, Position, SymbolInfo
+from .adapters import adapt_balance, adapt_order, adapt_position, adapt_symbol_info
 from .price_monitor import GatePriceMonitor
 
 
@@ -137,7 +137,7 @@ class GateClient:
     return f'{symbol}_USDT'
 
 
-  async def _ensure_leverage(self, symbol: str, leverage: int) -> None:
+  async def set_leverage(self, symbol: str, leverage: int) -> None:
     contract = self._symbol_to_contract(symbol)
     
     if self._leverage_cache.get(contract) == leverage:
@@ -152,18 +152,24 @@ class GateClient:
       )
       self._leverage_cache[contract] = leverage
     except GateApiException as ex:
-      raise OrderError(f"Failed to set leverage: {ex.message}") from ex
+      raise OrderError(f"Failed to set leverage for {symbol}: {ex.message}") from ex
 
 
-  async def set_leverage(self, symbol: str, leverage: int) -> None:
-    await self._ensure_leverage(symbol, leverage)
+  async def set_leverages(self, leverages: dict[str, int]) -> None:
+    tasks = [self.set_leverage(symbol, lev) for symbol, lev in leverages.items()]
+    await asyncio.gather(*tasks)
 
 
-  async def buy_market(self, symbol: str, size: float, leverage: int | None = None) -> Order:
+  def get_symbol_info(self, symbol: str) -> SymbolInfo | None:
     contract = self._symbol_to_contract(symbol)
-    
-    if leverage:
-      await self._ensure_leverage(symbol, leverage)
+    raw = self.contracts_meta.get(contract)
+    if not raw:
+      return None
+    return adapt_symbol_info(raw, symbol)
+
+
+  async def buy_market(self, symbol: str, size: float) -> Order:
+    contract = self._symbol_to_contract(symbol)
     
     order = FuturesOrder(
       contract=contract,
@@ -183,11 +189,8 @@ class GateClient:
       raise OrderError(f"Failed to buy market: {ex.message}") from ex
 
 
-  async def sell_market(self, symbol: str, size: float, leverage: int | None = None) -> Order:
+  async def sell_market(self, symbol: str, size: float) -> Order:
     contract = self._symbol_to_contract(symbol)
-    
-    if leverage:
-      await self._ensure_leverage(symbol, leverage)
     
     order = FuturesOrder(
       contract=contract,

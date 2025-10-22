@@ -7,8 +7,8 @@ from hyperliquid.exchange import Exchange
 from hyperliquid.info import Info
 
 from ..common.exceptions import OrderError
-from ..common.models import Balance, Order, Position, PositionSide
-from .adapters import adapt_balance, adapt_order, adapt_position
+from ..common.models import Balance, Order, Position, PositionSide, SymbolInfo
+from .adapters import adapt_balance, adapt_order, adapt_position, adapt_symbol_info
 from .price_monitor import HyperliquidPriceMonitor
 
 
@@ -80,6 +80,7 @@ class HyperliquidClient:
     for asset in meta['universe']:
       if not asset.get('isDelisted', False):
         assets[asset['name']] = {
+          'name': asset['name'],
           'max_leverage': asset['maxLeverage'],
           'sz_decimals': asset['szDecimals'],
         }
@@ -98,7 +99,7 @@ class HyperliquidClient:
         await self._refresh_meta()
 
 
-  async def _ensure_leverage(self, symbol: str, leverage: int) -> None:
+  async def set_leverage(self, symbol: str, leverage: int) -> None:
     if self._leverage_cache.get(symbol) == leverage:
       return
     
@@ -107,21 +108,26 @@ class HyperliquidClient:
         self.exchange.update_leverage,
         leverage,
         symbol,
-        True
+        False
       )
       self._leverage_cache[symbol] = leverage
     except Exception as ex:
-      raise OrderError(f"Failed to set leverage: {str(ex)}") from ex
+      raise OrderError(f"Failed to set leverage for {symbol}: {str(ex)}") from ex
 
 
-  async def set_leverage(self, symbol: str, leverage: int) -> None:
-    await self._ensure_leverage(symbol, leverage)
+  async def set_leverages(self, leverages: dict[str, int]) -> None:
+    tasks = [self.set_leverage(symbol, lev) for symbol, lev in leverages.items()]
+    await asyncio.gather(*tasks)
 
 
-  async def buy_market(self, symbol: str, size: float, leverage: int | None = None, slippage: float = 0.05) -> Order:
-    if leverage:
-      await self._ensure_leverage(symbol, leverage)
-    
+  def get_symbol_info(self, symbol: str) -> SymbolInfo | None:
+    raw = self.assets_meta.get(symbol)
+    if not raw:
+      return None
+    return adapt_symbol_info(raw)
+
+
+  async def buy_market(self, symbol: str, size: float, slippage: float = 0.05) -> Order:
     try:
       raw = await asyncio.to_thread(
         self.exchange.market_open, 
@@ -136,10 +142,7 @@ class HyperliquidClient:
       raise OrderError(f"Failed to buy market: {str(ex)}") from ex
 
 
-  async def sell_market(self, symbol: str, size: float, leverage: int | None = None, slippage: float = 0.05) -> Order:
-    if leverage:
-      await self._ensure_leverage(symbol, leverage)
-    
+  async def sell_market(self, symbol: str, size: float, slippage: float = 0.05) -> Order:
     try:
       raw = await asyncio.to_thread(
         self.exchange.market_open, 
