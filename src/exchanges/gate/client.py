@@ -10,6 +10,7 @@ from ..common.exceptions import InvalidSymbolError, OrderError
 from ..common.models import Balance, FundingRate, Order, Orderbook, Position, PositionSide, SymbolInfo, Volume24h
 from .adapters import adapt_balance, adapt_funding_rate, adapt_order, adapt_orderbook, adapt_position, adapt_symbol_info, adapt_volume_24h
 from .price_monitor import GatePriceMonitor
+from .orderbook_monitor import GateOrderbookMonitor
 
 
 __all__ = ['GateClient']
@@ -26,6 +27,7 @@ class GateClient:
     'client',
     'futures_api',
     'price_monitor',
+    'orderbook_monitor',
     'contracts_meta',
     '_leverage_cache',
     '_update_task',
@@ -52,6 +54,7 @@ class GateClient:
     self.futures_api = FuturesApi(self.client)
     
     self.price_monitor = GatePriceMonitor(settle)
+    self.orderbook_monitor = GateOrderbookMonitor(settle, self.futures_api)
     self.contracts_meta: dict[str, Any] = {}
     self._leverage_cache: dict[str, int] = {}
     self._update_task = None
@@ -62,6 +65,7 @@ class GateClient:
     await self._init_setup()
     contracts = list(self.contracts_meta.keys())
     await self.price_monitor.start(contracts)
+    await self.orderbook_monitor.start(contracts)
     return self
 
 
@@ -70,6 +74,7 @@ class GateClient:
     if self._update_task:
       await self._update_task
     self.price_monitor.stop()
+    self.orderbook_monitor.stop()
     if self.client:
       self.client.close()
 
