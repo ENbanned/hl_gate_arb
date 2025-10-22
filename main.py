@@ -15,11 +15,15 @@ async def main():
       gate: ExchangeClient = gate_client
       hyperliquid: ExchangeClient = hyperliquid_client
 
-      btc_info_gate = gate.get_symbol_info('BTC')
-      btc_info_hl = hyperliquid.get_symbol_info('BTC')
+      btc_info_gate = gate.get_symbol_info('XPL')
+      btc_info_hl = hyperliquid.get_symbol_info('XPL')
 
       print(btc_info_gate)
       print(btc_info_hl)
+      
+      await asyncio.sleep(5)
+      print(gate.price_monitor.get_price('XPL'))
+      print(hyperliquid.price_monitor.get_price('XPL'))
       # gate_open_positions = await gate.get_positions()
       # hyperliquid_open_positions = await hyperliquid.get_positions()
 
