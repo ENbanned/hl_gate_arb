@@ -230,8 +230,8 @@ class HyperliquidClient:
       raise OrderError(f"Failed to get 24h volume for {symbol}: {str(ex)}") from ex
 
 
-  async def estimate_fill_price(self, symbol: str, size: float, side: PositionSide) -> Decimal:
-    book = await self.get_orderbook(symbol, depth=50)
+  async def estimate_fill_price(self, symbol: str, size: float, side: PositionSide, depth: int = 100) -> Decimal:
+    book = await self.get_orderbook(symbol, depth=depth)
     
     levels = book.asks if side == PositionSide.LONG else book.bids
     

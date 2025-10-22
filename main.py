@@ -16,8 +16,8 @@ async def main():
       gate: ExchangeClient = gate_client
       hyperliquid: ExchangeClient = hyperliquid_client
 
-      gate_book = await gate.estimate_fill_price('ENA', 1000, PositionSide.SHORT)
-      hyperliquid_book = await hyperliquid.estimate_fill_price('ENA', 1000, PositionSide.SHORT)
+      gate_book = await gate.estimate_fill_price('ENA', 500000, PositionSide.SHORT, depth=50)
+      hyperliquid_book = await hyperliquid.estimate_fill_price('ENA', 500000, PositionSide.SHORT, depth=50)
 
       print(gate_book)
       print('*'*80)
