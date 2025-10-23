@@ -86,5 +86,5 @@ class SpreadFinder:
             profit_usd_gate_short=profit_gate_short,
             profit_usd_hl_short=profit_hl_short,
             best_direction=best_direction,
-            best_profit_usd=best_profit
+            best_usd_profit=best_profit
         )

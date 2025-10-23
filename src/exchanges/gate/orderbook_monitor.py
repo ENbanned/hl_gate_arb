@@ -195,12 +195,16 @@ class GateOrderbookMonitor:
                         'event': 'subscribe',
                         'payload': subscriptions
                     })
+                    print(f"[DEBUG] Subscribing to {len(subscriptions)} orderbooks")
                     await ws.send(subscribe_msg)
                     
                     async for message in ws:
                         if self._shutdown.is_set():
                             break
                         await self._handle_message(message)
+                        msg_count += 1
+                        if msg_count % 100 == 0:
+                            print(f"[DEBUG] Received {msg_count} WS messages")
             
             except (websockets.exceptions.WebSocketException, ConnectionError, OSError):
                 if not self._shutdown.is_set():
