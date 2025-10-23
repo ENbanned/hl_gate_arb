@@ -212,12 +212,21 @@ class GateOrderbookMonitor:
         self._ws_task = asyncio.create_task(self._ws_loop(contracts))
         await self._ready.wait()
         
-        tasks = []
-        for contract in contracts:
-            symbol = contract.replace('_USDT', '')
-            tasks.append(self._fetch_snapshot(symbol, contract))
+        batch_size = 10
+        delay_between_batches = 1.0
         
-        await asyncio.gather(*tasks, return_exceptions=True)
+        for i in range(0, len(contracts), batch_size):
+            batch = contracts[i:i + batch_size]
+            tasks = []
+            
+            for contract in batch:
+                symbol = contract.replace('_USDT', '')
+                tasks.append(self._fetch_snapshot(symbol, contract))
+            
+            await asyncio.gather(*tasks, return_exceptions=True)
+            
+            if i + batch_size < len(contracts):
+                await asyncio.sleep(delay_between_batches)
 
 
     async def stop(self) -> None:
