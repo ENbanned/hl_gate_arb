@@ -44,40 +44,53 @@ class SpreadFinder:
         )
 
 
-async def calculate_net_spread(
-    self, 
-    symbol: str, 
-    size: float
-) -> dict[str, Decimal]:
-    gate_buy = await self.gate.estimate_fill_price(symbol, size, PositionSide.LONG)
-    gate_sell = await self.gate.estimate_fill_price(symbol, size, PositionSide.SHORT)
-    hl_buy = await self.hyperliquid.estimate_fill_price(symbol, size, PositionSide.LONG)
-    hl_sell = await self.hyperliquid.estimate_fill_price(symbol, size, PositionSide.SHORT)
-    
-    gate_buy_with_fee = gate_buy * (Decimal('1') + self.gate_taker_fee)
-    gate_sell_with_fee = gate_sell * (Decimal('1') - self.gate_taker_fee)
-    hl_buy_with_fee = hl_buy * (Decimal('1') + self.hyperliquid_taker_fee)
-    hl_sell_with_fee = hl_sell * (Decimal('1') - self.hyperliquid_taker_fee)
-    
-    size_dec = Decimal(str(size))
-    
-    revenue_gate_short = gate_sell_with_fee * size_dec
-    cost_gate_short = hl_buy_with_fee * size_dec
-    profit_gate_short = revenue_gate_short - cost_gate_short
-    spread_gate_short = profit_gate_short / cost_gate_short * Decimal('100')
-    
-    revenue_hl_short = hl_sell_with_fee * size_dec
-    cost_hl_short = gate_buy_with_fee * size_dec
-    profit_hl_short = revenue_hl_short - cost_hl_short
-    spread_hl_short = profit_hl_short / cost_hl_short * Decimal('100')
-    
-    return {
-        'gate_short_pct': spread_gate_short,
-        'hl_short_pct': spread_hl_short,
-        'profit_gate_short': profit_gate_short,
-        'profit_hl_short': profit_hl_short
-    }
+    async def calculate_net_spread(
+        self, 
+        symbol: str, 
+        size: float
+    ) -> dict[str, Decimal]:
+        gate_buy = await self.gate.estimate_fill_price(symbol, size, PositionSide.LONG)
+        gate_sell = await self.gate.estimate_fill_price(symbol, size, PositionSide.SHORT)
+        hl_buy = await self.hyperliquid.estimate_fill_price(symbol, size, PositionSide.LONG)
+        hl_sell = await self.hyperliquid.estimate_fill_price(symbol, size, PositionSide.SHORT)
+        
+        gate_buy_with_fee = gate_buy * (Decimal('1') + self.gate_taker_fee)
+        gate_sell_with_fee = gate_sell * (Decimal('1') - self.gate_taker_fee)
+        hl_buy_with_fee = hl_buy * (Decimal('1') + self.hyperliquid_taker_fee)
+        hl_sell_with_fee = hl_sell * (Decimal('1') - self.hyperliquid_taker_fee)
+        
+        size_dec = Decimal(str(size))
+        
+        revenue_gate_short = gate_sell_with_fee * size_dec
+        cost_gate_short = hl_buy_with_fee * size_dec
+        profit_gate_short = revenue_gate_short - cost_gate_short
+        spread_gate_short = profit_gate_short / cost_gate_short * Decimal('100')
+        
+        revenue_hl_short = hl_sell_with_fee * size_dec
+        cost_hl_short = gate_buy_with_fee * size_dec
+        profit_hl_short = revenue_hl_short - cost_hl_short
+        spread_hl_short = profit_hl_short / cost_hl_short * Decimal('100')
+        
+        return {
+            'gate_short_pct': spread_gate_short,
+            'hl_short_pct': spread_hl_short,
+            'profit_gate_short': profit_gate_short,
+            'profit_hl_short': profit_hl_short
+        }
 
+    async def scan_opportunities(
+        self, 
+        symbols: list[str], 
+        min_spread_pct: Decimal
+    ) -> list[tuple[str, RawSpread]]:
+        opportunities = []
+        
+        for symbol in symbols:
+            raw = self.get_raw_spread(symbol)
+            if raw and raw.spread_pct >= min_spread_pct:
+                opportunities.append((symbol, raw))
+        
+        return opportunities
 
 
 
