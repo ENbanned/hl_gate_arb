@@ -212,6 +212,10 @@ class GateOrderbookMonitor:
                     async for message in ws:
                         if self._shutdown.is_set():
                             break
+                        
+                        if msg_count < 5:  # <- первые 5 сообщений
+                            print(f"[WS RAW {msg_count}]: {message[:200]}")  # первые 200 символов
+                        
                         await self._handle_message(message)
                         msg_count += 1
                         if msg_count % 100 == 0:
