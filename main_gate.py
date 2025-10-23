@@ -1,6 +1,6 @@
 import asyncio
 
-from settings import GATE_API_KEY, GATE_API_SECRET
+from src.settings import GATE_API_KEY, GATE_API_SECRET
 from src.exchanges.gate.client import GateClient
 
 

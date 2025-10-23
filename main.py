@@ -5,7 +5,7 @@ from src.exchanges.common.models import PositionSide
 from src.exchanges.gate import GateClient
 from src.exchanges.hyperliquid import HyperliquidClient
 
-from settings import GATE_API_KEY, GATE_API_SECRET, HYPERLIQUID_ACCOUNT_ADDRESS, HYPERLIQUID_SECRET_KEY
+from src.settings import GATE_API_KEY, GATE_API_SECRET, HYPERLIQUID_ACCOUNT_ADDRESS, HYPERLIQUID_SECRET_KEY
 
 
 
