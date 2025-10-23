@@ -21,25 +21,14 @@ class SpreadFinder:
 
 
   def get_raw_spread(self, symbol: str) -> dict[str, Decimal] | None:
-    """Быстрая проверка спреда по mid price без ордербуков"""
     gate_price = self.gate.price_monitor.get_price(symbol)
     hl_price = self.hyperliquid.price_monitor.get_price(symbol)
     
     if not gate_price or not hl_price:
       return None
     
-    gate_dec = Decimal(str(gate_price))
-    hl_dec = Decimal(str(hl_price))
-    
-    spread_gate_short = (gate_dec - hl_dec) / hl_dec
-    spread_hl_short = (hl_dec - gate_dec) / gate_dec
-    
-    return {
-      'gate_short': spread_gate_short,
-      'hl_short': spread_hl_short,
-      'gate_price': gate_dec,
-      'hl_price': hl_dec
-    }
+    return abs(gate_price - hl_price) / ((gate_price + hl_price) / 2) * 100
+
 
 
   async def check_spread(self, symbol: str, size: float) -> list[dict]:
