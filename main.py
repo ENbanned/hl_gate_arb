@@ -16,7 +16,12 @@ async def main():
 
             gate: ExchangeClient = gate_client
             hyperliquid: ExchangeClient = hyperliquid_client
-            spread_finder = SpreadFinder(gate, hyperliquid)
+            
+            common = gate.get_available_symbols() & hyperliquid.get_available_symbols()
+            symbols = sorted(common)
+            contracts = [f'{s}_USDT' for s in symbols]
+
+            print(f"Starting monitors for {len(symbols)} common symbols")
 
             await asyncio.sleep(6)
             

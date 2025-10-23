@@ -63,9 +63,6 @@ class GateClient:
 
     async def __aenter__(self):
         await self._init_setup()
-        contracts = list(self.contracts_meta.keys())
-        await self.price_monitor.start(contracts)
-        await self.orderbook_monitor.start(contracts)
         return self
 
 
@@ -174,6 +171,10 @@ class GateClient:
         if not raw:
             return None
         return adapt_symbol_info(raw, symbol)
+
+
+    def get_available_symbols(self) -> set[str]:
+        return {contract.replace('_USDT', '') for contract in self.contracts_meta.keys()}
 
 
     async def buy_market(self, symbol: str, size: float) -> Order:

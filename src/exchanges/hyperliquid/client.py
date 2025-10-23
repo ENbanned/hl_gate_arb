@@ -69,11 +69,6 @@ class HyperliquidClient:
     async def __aenter__(self):
         await self._refresh_meta()
         self._update_task = asyncio.create_task(self._meta_updater())
-
-        symbols = list(self.assets_meta.keys())
-
-        await self.price_monitor.start()
-        await self.orderbook_monitor.start(symbols)
         return self
 
 
@@ -139,6 +134,10 @@ class HyperliquidClient:
             return None
         return adapt_symbol_info(raw)
 
+
+    def get_available_symbols(self) -> set[str]:
+        return set(self.assets_meta.keys())
+    
 
     async def buy_market(self, symbol: str, size: float, slippage: float = 0.05) -> Order:
         try:
