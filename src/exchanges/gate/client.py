@@ -266,69 +266,68 @@ class GateClient:
             raise OrderError(f"Failed to get funding rate for {symbol}: {ex.message}") from ex
 
 
-  async def get_orderbook(self, symbol: str, depth: int = 20) -> Orderbook:
-    contract = self._symbol_to_contract(symbol)
-    
-    try:
-      raw = await asyncio.to_thread(
-        self.futures_api.list_futures_order_book,
-        self.settle,
-        contract,
-        limit=depth
-      )
-      return adapt_orderbook(raw.to_dict(), symbol)
-    except GateApiException as ex:
-      raise OrderError(f"Failed to get orderbook for {symbol}: {ex.message}") from ex
+    async def get_orderbook(self, symbol: str, depth: int = 20) -> Orderbook:
+        contract = self._symbol_to_contract(symbol)
+        
+        try:
+            raw = await asyncio.to_thread(
+                self.futures_api.list_futures_order_book,
+                self.settle,
+                contract,
+                limit=depth
+            )
+            return adapt_orderbook(raw.to_dict(), symbol)
+        except GateApiException as ex:
+            raise OrderError(f"Failed to get orderbook for {symbol}: {ex.message}") from ex
 
 
-  async def get_24h_volume(self, symbol: str) -> Volume24h:
-    contract = self._symbol_to_contract(symbol)
-    
-    try:
-      raw = await asyncio.to_thread(
-        self.futures_api.list_futures_tickers,
-        self.settle,
-        contract=contract
-      )
-      
-      if not raw:
-        raise OrderError(f"No ticker data for {symbol}")
-      
-      return adapt_volume_24h(raw[0].to_dict(), symbol)
-    except GateApiException as ex:
-      raise OrderError(f"Failed to get 24h volume for {symbol}: {ex.message}") from ex
+    async def get_24h_volume(self, symbol: str) -> Volume24h:
+        contract = self._symbol_to_contract(symbol)
+        
+        try:
+            raw = await asyncio.to_thread(
+                self.futures_api.list_futures_tickers,
+                self.settle,
+                contract=contract
+            )
+            
+            if not raw:
+                raise OrderError(f"No ticker data for {symbol}")
+            
+            return adapt_volume_24h(raw[0].to_dict(), symbol)
+        except GateApiException as ex:
+            raise OrderError(f"Failed to get 24h volume for {symbol}: {ex.message}") from ex
 
-
-  async def estimate_fill_price(self, symbol: str, size: float, side: PositionSide, depth: int = 100) -> Decimal:
-    book = self.orderbook_monitor.get_orderbook(symbol)
-    
-    if not book:
-      book = await self.get_orderbook(symbol, depth=min(depth, 50))
-    
-    levels = book.asks if side == PositionSide.LONG else book.bids
-    
-    if not levels:
-      raise OrderError(f"No orderbook data for {symbol}")
-    
-    remaining = Decimal(str(abs(size)))
-    total_cost = Decimal('0')
-    filled = Decimal('0')
-    
-    for level in levels:
-      if remaining <= 0:
-        break
-      
-      fill = min(remaining, level.size)
-      total_cost += fill * level.price
-      filled += fill
-      remaining -= fill
-    
-    if remaining > 0:
-      last_level = levels[-1]
-      slippage_factor = Decimal('1.005') if side == PositionSide.LONG else Decimal('0.995')
-      extrapolated_price = last_level.price * slippage_factor
-      
-      total_cost += remaining * extrapolated_price
-      filled += remaining
-    
-    return total_cost / filled
+    async def estimate_fill_price(self, symbol: str, size: float, side: PositionSide, depth: int = 100) -> Decimal:
+        book = self.orderbook_monitor.get_orderbook(symbol)
+        
+        if not book:
+            book = await self.get_orderbook(symbol, depth=min(depth, 50))
+        
+        levels = book.asks if side == PositionSide.LONG else book.bids
+        
+        if not levels:
+            raise OrderError(f"No orderbook data for {symbol}")
+        
+        remaining = Decimal(str(abs(size)))
+        total_cost = Decimal('0')
+        filled = Decimal('0')
+        
+        for level in levels:
+            if remaining <= 0:
+                break
+        
+            fill = min(remaining, level.size)
+            total_cost += fill * level.price
+            filled += fill
+            remaining -= fill
+        
+        if remaining > 0:
+            last_level = levels[-1]
+            slippage_factor = Decimal('1.005') if side == PositionSide.LONG else Decimal('0.995')
+            extrapolated_price = last_level.price * slippage_factor
+            
+            total_cost += remaining * extrapolated_price
+            filled += remaining
+        
+        return total_cost / filled
