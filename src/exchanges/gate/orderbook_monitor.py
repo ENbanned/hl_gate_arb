@@ -131,7 +131,7 @@ class GateOrderbookMonitor:
                 self.futures_api.list_futures_order_book,
                 self.settle,
                 contract,
-                limit=100,
+                limit=50,
                 with_id=True
             )
             
@@ -186,7 +186,7 @@ class GateOrderbookMonitor:
                 async with websockets.connect(self.ws_url) as ws:
                     subscriptions = []
                     for contract in contracts:
-                        subscriptions.append([contract, '100ms', '100'])
+                        subscriptions.append([contract, '100ms', '50'])
                     
                     subscribe_msg = json.dumps({
                         'time': int(time.time()),
