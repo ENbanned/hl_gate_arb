@@ -132,7 +132,7 @@ class GateOrderbookMonitor:
                 self.settle,
                 contract,
                 limit=50,
-                with_id=True
+                with_id='true'
             )
             
             snapshot = raw.to_dict()
@@ -176,7 +176,8 @@ class GateOrderbookMonitor:
                 
                 del self._update_queues[symbol]
         
-        except Exception:
+        except Exception as e:
+            print(f"[DEBUG] Failed to fetch {symbol}: {type(e).__name__}: {e}")
             pass
 
 
@@ -212,8 +213,8 @@ class GateOrderbookMonitor:
         self._ws_task = asyncio.create_task(self._ws_loop(contracts))
         await self._ready.wait()
         
-        batch_size = 10
-        delay_between_batches = 1.0
+        batch_size = 5
+        delay_between_batches = 2
         
         for i in range(0, len(contracts), batch_size):
             batch = contracts[i:i + batch_size]
