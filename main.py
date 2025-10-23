@@ -20,7 +20,7 @@ async def main():
 
       await asyncio.sleep(5)
 
-      result = spread_finder.get_raw_spread('ENA')
+      result = spread_finder.get_raw_spread('MET')
       print(result)
       
 
