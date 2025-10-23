@@ -20,7 +20,7 @@ class NetSpread(BaseModel):
     size: float
     gate_short_pct: Decimal
     hl_short_pct: Decimal
-    profit_gate_short: Decimal
-    profit_hl_short: Decimal
+    profit_usd_gate_short: Decimal
+    profit_usd_hl_short: Decimal
     best_direction: SpreadDirection
-    best_profit: Decimal
+    best_usd_profit: Decimal

@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 from ..exchanges.common import ExchangeClient, PositionSide
-from .models import RawSpread, SpreadDirection
+from .models import RawSpread, SpreadDirection, NetSpread
 from ..settings import GATE_TAKER_FEE, HYPERLIQUID_TAKER_FEE
 
 
@@ -83,27 +83,8 @@ class SpreadFinder:
             size=size,
             gate_short_pct=spread_gate_short,
             hl_short_pct=spread_hl_short,
-            profit_gate_short=profit_gate_short,
-            profit_hl_short=profit_hl_short,
+            profit_usd_gate_short=profit_gate_short,
+            profit_usd_hl_short=profit_hl_short,
             best_direction=best_direction,
-            best_profit=best_profit
+            best_profit_usd=best_profit
         )
-
-    async def scan_opportunities(
-        self, 
-        symbols: list[str], 
-        min_spread_pct: Decimal
-    ) -> list[tuple[str, RawSpread]]:
-        opportunities = []
-        
-        for symbol in symbols:
-            raw = self.get_raw_spread(symbol)
-            if raw and raw.spread_pct >= min_spread_pct:
-                opportunities.append((symbol, raw))
-        
-        return opportunities
-
-
-
-
-
