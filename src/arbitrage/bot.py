@@ -1,8 +1,7 @@
 from .spread import SpreadFinder
+from .models import BotMode
 
-class BotMode:
-    min_spread
 
 class Bot:
-    def __init__(self, mode: BotMode, ):
-        pass
+    def __init__(self, mode: BotMode):
+        self.mode = mode

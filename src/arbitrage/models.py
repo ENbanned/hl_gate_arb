@@ -1,6 +1,6 @@
 from enum import Enum
 from decimal import Decimal
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class SpreadDirection(str, Enum):
@@ -24,3 +24,15 @@ class NetSpread(BaseModel):
     profit_usd_hl_short: Decimal
     best_direction: SpreadDirection
     best_usd_profit: Decimal
+
+
+class MinSpread(BaseModel):
+    percentage: float
+
+
+class AnyProfit(BaseModel):
+    pass
+
+
+type BotMode = MinSpread | AnyProfit
+
