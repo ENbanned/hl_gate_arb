@@ -16,14 +16,12 @@ async def main():
 
       gate: ExchangeClient = gate_client
       hyperliquid: ExchangeClient = hyperliquid_client
-      spread_finder = SpreadFinder()
+      spread_finder = SpreadFinder(gate, hyperliquid)
 
-      gate_book = await gate.get_orderbook
-      hyperliquid_book = await hyperliquid.estimate_fill_price('ENA', 5000000, PositionSide.SHORT, depth=100)
+      await asyncio.sleep(5)
 
-      print(gate_book)
-      print('*'*80)
-      print(hyperliquid_book)
+      result = spread_finder.get_raw_spread('ENA')
+      print(result)
       
 
 asyncio.run(main())
