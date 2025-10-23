@@ -44,23 +44,39 @@ class SpreadFinder:
         )
 
 
-    async def check_spread(self, symbol: str, size: float) -> list[dict]:
-
-        gate_buy_price = await self.gate.estimate_fill_price(symbol, size, PositionSide.LONG)
-        gate_sell_price = await self.gate.estimate_fill_price(symbol, size, PositionSide.SHORT)
-        hyperliquid_buy_price = await self.hyperliquid.estimate_fill_price(symbol, size, PositionSide.LONG)
-        hyperliquid_sell_price = await self.hyperliquid.estimate_fill_price(symbol, size, PositionSide.SHORT)
-
-        # gate short -> hyperliquid long
-        spread_1 = (gate_sell_price - hyperliquid_buy_price) / hyperliquid_buy_price
-
-        # hyperliquid short -> gate long
-        spread_2 = (hyperliquid_sell_price - gate_buy_price) / gate_buy_price
-
-        total_fee = 2 * (GATE_TAKER_FEE + HYPERLIQUID_TAKER_FEE)
-
-        net_spread_1 = spread_1 - total_fee
-        net_spread_2 = spread_2 - total_fee
+async def calculate_net_spread(
+    self, 
+    symbol: str, 
+    size: float
+) -> dict[str, Decimal]:
+    gate_buy = await self.gate.estimate_fill_price(symbol, size, PositionSide.LONG)
+    gate_sell = await self.gate.estimate_fill_price(symbol, size, PositionSide.SHORT)
+    hl_buy = await self.hyperliquid.estimate_fill_price(symbol, size, PositionSide.LONG)
+    hl_sell = await self.hyperliquid.estimate_fill_price(symbol, size, PositionSide.SHORT)
+    
+    gate_buy_with_fee = gate_buy * (Decimal('1') + self.gate_taker_fee)
+    gate_sell_with_fee = gate_sell * (Decimal('1') - self.gate_taker_fee)
+    hl_buy_with_fee = hl_buy * (Decimal('1') + self.hyperliquid_taker_fee)
+    hl_sell_with_fee = hl_sell * (Decimal('1') - self.hyperliquid_taker_fee)
+    
+    size_dec = Decimal(str(size))
+    
+    revenue_gate_short = gate_sell_with_fee * size_dec
+    cost_gate_short = hl_buy_with_fee * size_dec
+    profit_gate_short = revenue_gate_short - cost_gate_short
+    spread_gate_short = profit_gate_short / cost_gate_short * Decimal('100')
+    
+    revenue_hl_short = hl_sell_with_fee * size_dec
+    cost_hl_short = gate_buy_with_fee * size_dec
+    profit_hl_short = revenue_hl_short - cost_hl_short
+    spread_hl_short = profit_hl_short / cost_hl_short * Decimal('100')
+    
+    return {
+        'gate_short_pct': spread_gate_short,
+        'hl_short_pct': spread_hl_short,
+        'profit_gate_short': profit_gate_short,
+        'profit_hl_short': profit_hl_short
+    }
 
 
 
