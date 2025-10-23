@@ -15,3 +15,12 @@ class RawSpread(BaseModel):
     hl_price: Decimal
 
 
+class NetSpread(BaseModel):
+    symbol: str
+    size: float
+    gate_short_pct: Decimal
+    hl_short_pct: Decimal
+    profit_gate_short: Decimal
+    profit_hl_short: Decimal
+    best_direction: SpreadDirection
+    best_profit: Decimal

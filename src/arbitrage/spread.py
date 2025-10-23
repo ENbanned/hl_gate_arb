@@ -48,15 +48,12 @@ class SpreadFinder:
         self, 
         symbol: str, 
         size: float
-    ) -> dict[str, Decimal]:
+    ) -> NetSpread:
         gate_buy = await self.gate.estimate_fill_price(symbol, size, PositionSide.LONG)
         gate_sell = await self.gate.estimate_fill_price(symbol, size, PositionSide.SHORT)
         hl_buy = await self.hyperliquid.estimate_fill_price(symbol, size, PositionSide.LONG)
         hl_sell = await self.hyperliquid.estimate_fill_price(symbol, size, PositionSide.SHORT)
         
-        print(f"Gate buy: {gate_buy}, sell: {gate_sell}")
-        print(f"HL buy: {hl_buy}, sell: {hl_sell}")
-
         gate_buy_with_fee = gate_buy * (Decimal('1') + self.gate_taker_fee)
         gate_sell_with_fee = gate_sell * (Decimal('1') - self.gate_taker_fee)
         hl_buy_with_fee = hl_buy * (Decimal('1') + self.hyperliquid_taker_fee)
@@ -74,12 +71,23 @@ class SpreadFinder:
         profit_hl_short = revenue_hl_short - cost_hl_short
         spread_hl_short = profit_hl_short / cost_hl_short * Decimal('100')
         
-        return {
-            'gate_short_pct': spread_gate_short,
-            'hl_short_pct': spread_hl_short,
-            'profit_gate_short': profit_gate_short,
-            'profit_hl_short': profit_hl_short
-        }
+        if profit_gate_short > profit_hl_short:
+            best_direction = SpreadDirection.GATE_SHORT
+            best_profit = profit_gate_short
+        else:
+            best_direction = SpreadDirection.HL_SHORT
+            best_profit = profit_hl_short
+        
+        return NetSpread(
+            symbol=symbol,
+            size=size,
+            gate_short_pct=spread_gate_short,
+            hl_short_pct=spread_hl_short,
+            profit_gate_short=profit_gate_short,
+            profit_hl_short=profit_hl_short,
+            best_direction=best_direction,
+            best_profit=best_profit
+        )
 
     async def scan_opportunities(
         self, 
