@@ -47,12 +47,22 @@ class GateOrderbookMonitor:
         try:
             msg = json.loads(message)
             
+            # Логируем ВСЁ что приходит
+            channel = msg.get('channel')
+            event = msg.get('event')
+            
+            if event == 'subscribe':
+                print(f"[WS] Subscribe response: {msg}")
+            elif channel != 'futures.order_book_update':
+                print(f"[WS] Other message - channel={channel}, event={event}")
+            
             if msg.get('channel') != 'futures.order_book_update':
                 return
             
             event = msg.get('event')
             
             if event == 'update':
+                print(f"[WS] Orderbook update received!")  # <- добавить
                 result = msg.get('result')
                 if not result:
                     return
@@ -86,8 +96,8 @@ class GateOrderbookMonitor:
                     self._is_ready = True
                     self._ready.set()
         
-        except (KeyError, ValueError, TypeError, json.JSONDecodeError):
-            pass
+        except (KeyError, ValueError, TypeError, json.JSONDecodeError) as e:
+            print(f"[WS] Parse error: {e}")
 
 
     def _apply_update(self, symbol: str, update: dict[str, Any]) -> None:
@@ -198,6 +208,7 @@ class GateOrderbookMonitor:
                     print(f"[DEBUG] Subscribing to {len(subscriptions)} orderbooks")
                     await ws.send(subscribe_msg)
                     
+                    msg_count = 0
                     async for message in ws:
                         if self._shutdown.is_set():
                             break
