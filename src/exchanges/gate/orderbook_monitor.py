@@ -7,6 +7,7 @@ from typing import Any
 
 import websockets
 from gate_api import FuturesApi
+from gate_api.exceptions import GateApiException
 
 from ..common.models import Orderbook, OrderbookLevel
 
@@ -127,59 +128,77 @@ class GateOrderbookMonitor:
         await self._fetch_snapshot(symbol, contract)
 
 
-    async def _fetch_snapshot(self, symbol: str, contract: str) -> None:
-        try:
-            raw = await asyncio.to_thread(
-                self.futures_api.list_futures_order_book,
-                self.settle,
-                contract,
-                limit=50,
-                with_id='true'
-            )
-            
-            snapshot = raw.to_dict()
-            base_id = snapshot['id']
-            
-            bids = [
-                OrderbookLevel(price=Decimal(level['p']), size=Decimal(str(level['s'])))
-                for level in snapshot['bids']
-            ]
-            asks = [
-                OrderbookLevel(price=Decimal(level['p']), size=Decimal(str(level['s'])))
-                for level in snapshot['asks']
-            ]
-            
-            self._orderbooks[symbol] = Orderbook(
-                symbol=symbol,
-                bids=bids,
-                asks=asks,
-                timestamp=int(snapshot['current'] * 1000)
-            )
-            self._base_ids[symbol] = base_id
-            
-            if symbol in self._update_queues:
-                queue = self._update_queues[symbol]
+    async def _fetch_snapshot(self, symbol: str, contract: str, max_retries: int = 5) -> None:
+        for attempt in range(max_retries):
+            try:
+                raw = await asyncio.to_thread(
+                    self.futures_api.list_futures_order_book,
+                    self.settle,
+                    contract,
+                    limit=50,
+                    with_id='true'
+                )
                 
-                while queue:
-                    update = queue[0]
-                    u_first = update['U']
-                    u_last = update['u']
+                snapshot = raw.to_dict()
+                base_id = snapshot['id']
+                
+                bids = [
+                    OrderbookLevel(price=Decimal(level['p']), size=Decimal(str(level['s'])))
+                    for level in snapshot['bids']
+                ]
+                asks = [
+                    OrderbookLevel(price=Decimal(level['p']), size=Decimal(str(level['s'])))
+                    for level in snapshot['asks']
+                ]
+                
+                self._orderbooks[symbol] = Orderbook(
+                    symbol=symbol,
+                    bids=bids,
+                    asks=asks,
+                    timestamp=int(snapshot['current'] * 1000)
+                )
+                self._base_ids[symbol] = base_id
+                
+                if symbol in self._update_queues:
+                    queue = self._update_queues[symbol]
                     
-                    if u_last < base_id + 1:
-                        queue.popleft()
-                        continue
+                    while queue:
+                        update = queue[0]
+                        u_first = update['U']
+                        u_last = update['u']
+                        
+                        if u_last < base_id + 1:
+                            queue.popleft()
+                            continue
+                        
+                        if u_first <= base_id + 1 and u_last >= base_id + 1:
+                            self._apply_update(symbol, update)
+                            self._base_ids[symbol] = u_last
+                            queue.popleft()
+                        else:
+                            break
                     
-                    if u_first <= base_id + 1 and u_last >= base_id + 1:
-                        self._apply_update(symbol, update)
-                        self._base_ids[symbol] = u_last
-                        queue.popleft()
+                    del self._update_queues[symbol]
+                
+                return
+            
+            except GateApiException as ex:
+                if ex.label == 'TOO_MANY_REQUESTS' and attempt < max_retries - 1:
+                    reset_ts = ex.headers.get('X-Gate-RateLimit-Reset')
+                    if reset_ts:
+                        wait_time = int(reset_ts) - int(time.time()) + 0.1
+                        if wait_time > 0:
+                            print(f"[RATE LIMIT] Waiting {wait_time:.1f}s until {reset_ts}")
+                            await asyncio.sleep(wait_time)
                     else:
-                        break
-                
-                del self._update_queues[symbol]
-        
-        except Exception as e:
-            pass
+                        await asyncio.sleep(2 ** attempt)
+                else:
+                    print(f"[DEBUG] Failed to fetch {symbol}: {type(ex).__name__}: {ex.message}")
+                    return
+            
+            except Exception as e:
+                print(f"[DEBUG] Failed to fetch {symbol}: {type(e).__name__}: {e}")
+                return
 
 
     async def _ws_loop(self, contracts: list[str]) -> None:
@@ -194,7 +213,6 @@ class GateOrderbookMonitor:
                             'payload': [contract, '100ms', '50']
                         })
                         await ws.send(subscribe_msg)
-                        await asyncio.sleep(0.1)
                                         
                     async for message in ws:
                         if self._shutdown.is_set():
@@ -212,21 +230,12 @@ class GateOrderbookMonitor:
         self._ws_task = asyncio.create_task(self._ws_loop(contracts))
         await self._ready.wait()
         
-        batch_size = 5
-        delay_between_batches = 2
+        tasks = [
+            self._fetch_snapshot(contract.replace('_USDT', ''), contract)
+            for contract in contracts
+        ]
         
-        for i in range(0, len(contracts), batch_size):
-            batch = contracts[i:i + batch_size]
-            tasks = []
-            
-            for contract in batch:
-                symbol = contract.replace('_USDT', '')
-                tasks.append(self._fetch_snapshot(symbol, contract))
-            
-            await asyncio.gather(*tasks, return_exceptions=True)
-            
-            if i + batch_size < len(contracts):
-                await asyncio.sleep(delay_between_batches)
+        await asyncio.gather(*tasks, return_exceptions=True)
 
 
     async def stop(self) -> None:
