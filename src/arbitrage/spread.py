@@ -20,14 +20,27 @@ class SpreadFinder:
     self.hyperliquid_taker_fee = hyperliquid_taker_fee
 
 
-  def get_raw_spread(self, symbol: str) -> dict[str, Decimal] | None:
-    gate_price = self.gate.price_monitor.get_price(symbol)
+    def get_raw_spread(self, symbol: str) -> dict[str, Decimal] | None:
+        gate_price = self.gate.price_monitor.get_price(symbol)
     hl_price = self.hyperliquid.price_monitor.get_price(symbol)
     
     if not gate_price or not hl_price:
-      return None
+        return None
     
-    return abs(gate_price - hl_price) / ((gate_price + hl_price) / 2) * 100
+    gate_dec = Decimal(str(gate_price))
+    hl_dec = Decimal(str(hl_price))
+    
+    mid_price = (gate_dec + hl_dec) / Decimal('2')
+    spread_pct = abs(gate_dec - hl_dec) / mid_price * Decimal('100')
+    
+    direction = 'gate_short' if gate_dec > hl_dec else 'hl_short'
+    
+    return {
+        'spread_pct': spread_pct,
+        'direction': direction,
+        'gate_price': gate_dec,
+        'hl_price': hl_dec
+    }
 
 
 
