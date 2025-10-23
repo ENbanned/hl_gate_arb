@@ -20,10 +20,8 @@ async def main():
 
             await asyncio.sleep(6)
             
-            result = spread_finder.get_raw_spread('MET')
-            result_2 = await spread_finder.calculate_net_spread('MET', 4000)
+            result = gate.orderbook_monitor.get_orderbook('ENA_USDT')
             print(result)
-            print(result_2)
         
 
 asyncio.run(main())
