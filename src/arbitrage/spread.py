@@ -1,19 +1,19 @@
-from decimal import Decimal
+    from decimal import Decimal
 
-from ..exchanges.common import ExchangeClient, PositionSide
-from ..settings import GATE_TAKER_FEE, HYPERLIQUID_TAKER_FEE
+    from ..exchanges.common import ExchangeClient, PositionSide
+    from ..settings import GATE_TAKER_FEE, HYPERLIQUID_TAKER_FEE
 
 
-class SpreadFinder:
-  __slots__ = ('gate', 'hyperliquid', 'gate_taker_fee', 'hyperliquid_taker_fee')
-  
-  def __init__(
+    class SpreadFinder:
+    __slots__ = ('gate', 'hyperliquid', 'gate_taker_fee', 'hyperliquid_taker_fee')
+
+    def __init__(
     self,
     gate: ExchangeClient,
     hyperliquid: ExchangeClient,
     gate_taker_fee: Decimal = GATE_TAKER_FEE,
     hyperliquid_taker_fee: Decimal = HYPERLIQUID_TAKER_FEE
-  ):
+    ):
     self.gate = gate
     self.hyperliquid = hyperliquid
     self.gate_taker_fee = gate_taker_fee
@@ -21,30 +21,30 @@ class SpreadFinder:
 
 
     def get_raw_spread(self, symbol: str) -> dict[str, Decimal] | None:
-        gate_price = self.gate.price_monitor.get_price(symbol)
+    gate_price = self.gate.price_monitor.get_price(symbol)
     hl_price = self.hyperliquid.price_monitor.get_price(symbol)
-    
+
     if not gate_price or not hl_price:
-        return None
-    
+    return None
+
     gate_dec = Decimal(str(gate_price))
     hl_dec = Decimal(str(hl_price))
-    
+
     mid_price = (gate_dec + hl_dec) / Decimal('2')
     spread_pct = abs(gate_dec - hl_dec) / mid_price * Decimal('100')
-    
+
     direction = 'gate_short' if gate_dec > hl_dec else 'hl_short'
-    
+
     return {
-        'spread_pct': spread_pct,
-        'direction': direction,
-        'gate_price': gate_dec,
-        'hl_price': hl_dec
+    'spread_pct': spread_pct,
+    'direction': direction,
+    'gate_price': gate_dec,
+    'hl_price': hl_dec
     }
 
 
 
-  async def check_spread(self, symbol: str, size: float) -> list[dict]:
+    async def check_spread(self, symbol: str, size: float) -> list[dict]:
 
     gate_buy_price = await self.gate.estimate_fill_price(symbol, size, PositionSide.LONG)
     gate_sell_price = await self.gate.estimate_fill_price(symbol, size, PositionSide.SHORT)
@@ -66,4 +66,4 @@ class SpreadFinder:
 
 
 
-      
+
