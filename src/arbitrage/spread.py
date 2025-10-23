@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from ..exchanges.common import ExchangeClient, PositionSide
+from .models import RawSpread, SpreadDirection
 from ..settings import GATE_TAKER_FEE, HYPERLIQUID_TAKER_FEE
 
 
@@ -20,7 +21,7 @@ class SpreadFinder:
         self.hyperliquid_taker_fee = hyperliquid_taker_fee
 
 
-    def get_raw_spread(self, symbol: str) -> dict[str, Decimal] | None:
+    def get_raw_spread(self, symbol: str) -> RawSpread | None:
         gate_price = self.gate.price_monitor.get_price(symbol)
         hl_price = self.hyperliquid.price_monitor.get_price(symbol)
 
@@ -33,15 +34,14 @@ class SpreadFinder:
         mid_price = (gate_dec + hl_dec) / Decimal('2')
         spread_pct = abs(gate_dec - hl_dec) / mid_price * Decimal('100')
 
-        direction = 'gate_short' if gate_dec > hl_dec else 'hl_short'
+        direction = SpreadDirection.GATE_SHORT if gate_dec > hl_dec else SpreadDirection.HL_SHORT
 
-        return {
-        'spread_pct': spread_pct,
-        'direction': direction,
-        'gate_price': gate_dec,
-        'hl_price': hl_dec
-        }
-
+        return RawSpread(
+            spread_pct=spread_pct,
+            direction=direction,
+            gate_price=gate_dec,
+            hl_price=hl_dec
+        )
 
 
     async def check_spread(self, symbol: str, size: float) -> list[dict]:

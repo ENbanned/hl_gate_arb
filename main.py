@@ -18,7 +18,6 @@ async def main():
       hyperliquid: ExchangeClient = hyperliquid_client
       spread_finder = SpreadFinder(gate, hyperliquid)
 
-      await asyncio.sleep(5)
 
       result = spread_finder.get_raw_spread('MET')
       print(result)
