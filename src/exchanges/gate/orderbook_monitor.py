@@ -195,31 +195,22 @@ class GateOrderbookMonitor:
         while not self._shutdown.is_set():
             try:
                 async with websockets.connect(self.ws_url) as ws:
-                    subscriptions = []
                     for contract in contracts:
-                        subscriptions.append([contract, '100ms', '50'])
+                        subscribe_msg = json.dumps({
+                            'time': int(time.time()),
+                            'channel': 'futures.order_book_update',
+                            'event': 'subscribe',
+                            'payload': [contract, '100ms', '50']
+                        })
+                        await ws.send(subscribe_msg)
+                        await asyncio.sleep(0.1)
                     
-                    subscribe_msg = json.dumps({
-                        'time': int(time.time()),
-                        'channel': 'futures.order_book_update',
-                        'event': 'subscribe',
-                        'payload': subscriptions
-                    })
-                    print(f"[DEBUG] Subscribing to {len(subscriptions)} orderbooks")
-                    await ws.send(subscribe_msg)
+                    print(f"[DEBUG] Subscribed to {len(contracts)} orderbooks")
                     
-                    msg_count = 0
                     async for message in ws:
                         if self._shutdown.is_set():
                             break
-                        
-                        if msg_count < 5:  # <- первые 5 сообщений
-                            print(f"[WS RAW {msg_count}]: {message[:200]}")  # первые 200 символов
-                        
                         await self._handle_message(message)
-                        msg_count += 1
-                        if msg_count % 100 == 0:
-                            print(f"[DEBUG] Received {msg_count} WS messages")
             
             except (websockets.exceptions.WebSocketException, ConnectionError, OSError):
                 if not self._shutdown.is_set():
