@@ -54,6 +54,9 @@ class SpreadFinder:
         hl_buy = await self.hyperliquid.estimate_fill_price(symbol, size, PositionSide.LONG)
         hl_sell = await self.hyperliquid.estimate_fill_price(symbol, size, PositionSide.SHORT)
         
+        print(f"Gate buy: {gate_buy}, sell: {gate_sell}")
+        print(f"HL buy: {hl_buy}, sell: {hl_sell}")
+
         gate_buy_with_fee = gate_buy * (Decimal('1') + self.gate_taker_fee)
         gate_sell_with_fee = gate_sell * (Decimal('1') - self.gate_taker_fee)
         hl_buy_with_fee = hl_buy * (Decimal('1') + self.hyperliquid_taker_fee)

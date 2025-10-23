@@ -18,10 +18,10 @@ async def main():
             hyperliquid: ExchangeClient = hyperliquid_client
             spread_finder = SpreadFinder(gate, hyperliquid)
 
-            await asyncio.sleep(5)
+            await asyncio.sleep(6)
             
             result = spread_finder.get_raw_spread('MET')
-            result_2 = await spread_finder.calculate_net_spread('MET', 100000)
+            result_2 = await spread_finder.calculate_net_spread('MET', 4000)
             print(result)
             print(result_2)
         
