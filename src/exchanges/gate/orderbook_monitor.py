@@ -180,73 +180,73 @@ class GateOrderbookMonitor:
             pass
 
 
-  async def _ws_loop(self, contracts: list[str]) -> None:
-    while not self._shutdown.is_set():
-      try:
-        async with websockets.connect(self.ws_url) as ws:
-          subscriptions = []
-          for contract in contracts:
-            subscriptions.append([contract, '100ms', '100'])
-          
-          subscribe_msg = json.dumps({
-            'time': int(time.time()),
-            'channel': 'futures.order_book_update',
-            'event': 'subscribe',
-            'payload': subscriptions
-          })
-          await ws.send(subscribe_msg)
-          
-          async for message in ws:
-            if self._shutdown.is_set():
-              break
-            await self._handle_message(message)
-      
-      except (websockets.exceptions.WebSocketException, ConnectionError, OSError):
-        if not self._shutdown.is_set():
-          await asyncio.sleep(5)
+    async def _ws_loop(self, contracts: list[str]) -> None:
+        while not self._shutdown.is_set():
+            try:
+                async with websockets.connect(self.ws_url) as ws:
+                    subscriptions = []
+                    for contract in contracts:
+                        subscriptions.append([contract, '100ms', '100'])
+                    
+                    subscribe_msg = json.dumps({
+                        'time': int(time.time()),
+                        'channel': 'futures.order_book_update',
+                        'event': 'subscribe',
+                        'payload': subscriptions
+                    })
+                    await ws.send(subscribe_msg)
+                    
+                    async for message in ws:
+                        if self._shutdown.is_set():
+                            break
+                        await self._handle_message(message)
+            
+            except (websockets.exceptions.WebSocketException, ConnectionError, OSError):
+                if not self._shutdown.is_set():
+                    await asyncio.sleep(5)
 
 
-  async def start(self, contracts: list[str]) -> None:
-    self._contracts = contracts
-    
-    self._ws_task = asyncio.create_task(self._ws_loop(contracts))
-    await self._ready.wait()
-    
-    tasks = []
-    for contract in contracts:
-      symbol = contract.replace('_USDT', '')
-      tasks.append(self._fetch_snapshot(symbol, contract))
-    
-    await asyncio.gather(*tasks, return_exceptions=True)
+    async def start(self, contracts: list[str]) -> None:
+        self._contracts = contracts
+        
+        self._ws_task = asyncio.create_task(self._ws_loop(contracts))
+        await self._ready.wait()
+        
+        tasks = []
+        for contract in contracts:
+            symbol = contract.replace('_USDT', '')
+            tasks.append(self._fetch_snapshot(symbol, contract))
+        
+        await asyncio.gather(*tasks, return_exceptions=True)
 
 
-  async def stop(self) -> None:
-    self._shutdown.set()
-    if self._ws_task:
-      self._ws_task.cancel()
-      try:
-        await self._ws_task
-      except asyncio.CancelledError:
-        pass
+    async def stop(self) -> None:
+        self._shutdown.set()
+        if self._ws_task:
+            self._ws_task.cancel()
+            try:
+                await self._ws_task
+            except asyncio.CancelledError:
+                pass
 
 
-  def get_orderbook(self, symbol: str) -> Orderbook | None:
-    return self._orderbooks.get(symbol)
+    def get_orderbook(self, symbol: str) -> Orderbook | None:
+        return self._orderbooks.get(symbol)
 
 
-  def get_best_bid(self, symbol: str) -> OrderbookLevel | None:
-    book = self._orderbooks.get(symbol)
-    if not book or not book.bids:
-      return None
-    return book.bids[0]
+    def get_best_bid(self, symbol: str) -> OrderbookLevel | None:
+        book = self._orderbooks.get(symbol)
+        if not book or not book.bids:
+            return None
+        return book.bids[0]
 
 
-  def get_best_ask(self, symbol: str) -> OrderbookLevel | None:
-    book = self._orderbooks.get(symbol)
-    if not book or not book.asks:
-      return None
-    return book.asks[0]
+    def get_best_ask(self, symbol: str) -> OrderbookLevel | None:
+        book = self._orderbooks.get(symbol)
+        if not book or not book.asks:
+            return None
+        return book.asks[0]
 
 
-  def has_orderbook(self, symbol: str) -> bool:
-    return symbol in self._orderbooks
+    def has_orderbook(self, symbol: str) -> bool:
+        return symbol in self._orderbooks
