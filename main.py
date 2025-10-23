@@ -25,8 +25,6 @@ async def main():
 
             await asyncio.sleep(6)
             
-            result = gate.orderbook_monitor.get_orderbook('ENA_USDT')
-            print(result)
         
 
 asyncio.run(main())
