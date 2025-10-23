@@ -1,14 +1,14 @@
 class ExchangeError(Exception):
-  pass
+    pass
 
 
 class InsufficientBalanceError(ExchangeError):
-  pass
+    pass
 
 
 class InvalidSymbolError(ExchangeError):
-  pass
+    pass
 
 
 class OrderError(ExchangeError):
-  pass
+    pass

@@ -1,4 +1,6 @@
 from .client import GateClient
 
 
-__all__ = ['GateClient']
+__all__ = [
+    'GateClient'
+]
