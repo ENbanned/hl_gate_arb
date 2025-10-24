@@ -18,12 +18,17 @@ async def main():
 
             gate: ExchangeClient = gate_client
             hyperliquid: ExchangeClient = hyperliquid_client
-            bot = Bot(mode=MinSpread(percentage=1), gate, hyperliquid)
 
-            await asyncio.sleep(6)
+            await gate.set_leverage('0G', 3)
+            await hyperliquid.set_leverage('0G', 3)
+
+            pos_1 = await gate.buy_market('0G', 1000)
+
+            async with Bot(MinSpread(percentage=1), gate, hyperliquid) as bot:
+                await asyncio.sleep(6)
             
-            result = await bot._get()
-            print(result)
+                result = await bot._get()
+                print(result)
         
 
 asyncio.run(main())
