@@ -66,4 +66,20 @@ class Bot:
         logger.info(f"[BOT] Set leverage for {len(leverages)} symbols")
 
 
+    async def _calculate_spread_loop(self):
+        self._running = True
+        
+        while self._running:
+            tasks = []
+            for symbol in self.symbols:
+                tasks.append(self.finder.calculate_net_spread(symbol, 100.0))
+            
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            for symbol, result in zip(self.symbols, results):
+                if isinstance(result, Exception):
+                    logger.error(f"[BOT] Error checking {symbol}: {result}")
+                    continue
+                
+                yield result
         
