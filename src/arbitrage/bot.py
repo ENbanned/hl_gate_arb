@@ -40,5 +40,5 @@ class Bot:
         pass
 
 
-    async def _get(self):
+    async def _prepare_leverages(self):
         print(self.symbols)

@@ -22,7 +22,13 @@ async def main():
             await gate.set_leverage('0G', 3)
             await hyperliquid.set_leverage('0G', 3)
 
-            pos_1 = await gate.buy_market('0G', 1000)
+            pos_1 = await gate.buy_market('0G', 100)
+            print(pos_1) # order_id='273030727653729867' coin='0G' size=Decimal('100') side=<PositionSide.LONG: 'long'> fill_price=Decimal('1.7914') status=<OrderStatus.FILLED: 'filled'> fee=Decimal('0.085987200')
+            print('-----')
+            pos_2 = await hyperliquid.buy_market('0G', 100)
+            print(pos_2) # order_id='211299417068' coin='0G' size=Decimal('100.0') side=<PositionSide.LONG: 'long'> fill_price=Decimal('1.7873') status=<OrderStatus.FILLED: 'filled'> fee=Decimal('0')
+            
+            return
 
             async with Bot(MinSpread(percentage=1), gate, hyperliquid) as bot:
                 await asyncio.sleep(6)
