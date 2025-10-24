@@ -5,6 +5,7 @@ from src.exchanges.common.models import PositionSide
 from src.exchanges.gate import GateClient
 from src.exchanges.hyperliquid import HyperliquidClient
 from src.arbitrage.spread import SpreadFinder
+from src.arbitrage.models import BotMode, MinSpread, AnyProfit
 from src.arbitrage.bot import Bot
 
 from src.settings import GATE_API_KEY, GATE_API_SECRET, HYPERLIQUID_ACCOUNT_ADDRESS, HYPERLIQUID_SECRET_KEY
@@ -17,16 +18,12 @@ async def main():
 
             gate: ExchangeClient = gate_client
             hyperliquid: ExchangeClient = hyperliquid_client
-            bot = Ar
-            
-            common = gate.get_available_symbols() & hyperliquid.get_available_symbols()
-            symbols = sorted(common)
-            contracts = [f'{s}_USDT' for s in symbols]
-
-            print(f"Starting monitors for {len(symbols)} common symbols")
+            bot = Bot(mode=MinSpread(percentage=1), gate, hyperliquid)
 
             await asyncio.sleep(6)
             
+            result = await bot._get()
+            print(result)
         
 
 asyncio.run(main())
