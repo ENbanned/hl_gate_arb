@@ -160,6 +160,7 @@ class GateClient:
                 str(leverage)
             )
             self._leverage_cache[contract] = leverage
+            print(contract, 1)
         except GateApiException as ex:
             raise OrderError(f"Failed to set leverage for {symbol}: {ex.message}") from ex
 
