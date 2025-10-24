@@ -18,6 +18,8 @@ from .adapters import (
 from .price_monitor import HyperliquidPriceMonitor
 from .orderbook_monitor import HyperliquidOrderbookMonitor
 
+from ...logger import logger
+
 
 __all__ = ['HyperliquidClient']
 
@@ -65,6 +67,7 @@ class HyperliquidClient:
         self.price_monitor = HyperliquidPriceMonitor(self.info)
         self.orderbook_monitor = HyperliquidOrderbookMonitor(self.info)
 
+        logger.info('Hyperlerliquid client initializated succesfully.')
 
     async def __aenter__(self):
         await self._refresh_meta()

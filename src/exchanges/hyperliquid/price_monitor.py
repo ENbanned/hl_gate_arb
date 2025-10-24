@@ -3,6 +3,8 @@ from typing import Any
 
 from hyperliquid.info import Info
 
+from ...logger import logger
+
 
 __all__ = ['HyperliquidPriceMonitor']
 
@@ -16,6 +18,8 @@ class HyperliquidPriceMonitor:
         self._ready = asyncio.Event()
         self._is_ready = False
         self._loop: asyncio.AbstractEventLoop | None = None
+
+        logger.info('Hyperlerliquid client initializated succesfully.')
 
 
     def _on_mids_update(self, msg: Any) -> None:

@@ -21,7 +21,7 @@ async def main():
             hyperliquid: ExchangeClient = hyperliquid_client
 
             info = gate.get_symbol_info('0G')
-            logger.info(info)
+
             print(hyperliquid.get_symbol_info('0G'))
             return
 
