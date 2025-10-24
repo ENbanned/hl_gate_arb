@@ -20,15 +20,10 @@ async def main():
             gate: ExchangeClient = gate_client
             hyperliquid: ExchangeClient = hyperliquid_client
 
-            info = gate.get_symbol_info('0G')
-
-            print(hyperliquid.get_symbol_info('0G'))
-            return
-
             async with Bot(MinSpread(percentage=1), gate, hyperliquid) as bot:
                 await asyncio.sleep(6)
             
-                result = await bot._get()
+                result = await bot._prepare_leverages()
                 print(result)
         
 

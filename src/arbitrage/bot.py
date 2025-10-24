@@ -4,6 +4,8 @@ from .spread import SpreadFinder
 from .models import BotMode
 from ..exchanges.common import ExchangeClient
 
+from ..logger import logger
+
 
 class Bot:
     __slots__ = ('mode', 'gate', 'hyperliquid', 'finder', 'symbols')
@@ -27,14 +29,14 @@ class Bot:
         
         gate_contracts = [f'{s}_USDT' for s in self.symbols]
         
-        print(f"[BOT] Starting monitors for {len(self.symbols)} symbols...")
+        logger.info(f"[BOT] Starting monitors for {len(self.symbols)} symbols...")
         
         await self.gate.price_monitor.start(gate_contracts)
         await self.gate.orderbook_monitor.start(gate_contracts)
         await self.hyperliquid.price_monitor.start()
         await self.hyperliquid.orderbook_monitor.start(self.symbols)
         
-        print(f"[BOT] Ready")
+        logger.info(f"[BOT] Ready")
         return self
     
     

@@ -19,8 +19,6 @@ class HyperliquidPriceMonitor:
         self._is_ready = False
         self._loop: asyncio.AbstractEventLoop | None = None
 
-        logger.info('Hyperlerliquid client initializated succesfully.')
-
 
     def _on_mids_update(self, msg: Any) -> None:
         if msg['channel'] != 'allMids':

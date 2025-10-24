@@ -12,6 +12,8 @@ from .adapters import adapt_balance, adapt_funding_rate, adapt_order, adapt_orde
 from .price_monitor import GatePriceMonitor
 from .orderbook_monitor import GateOrderbookMonitor
 
+from ...logger import logger
+
 
 __all__ = ['GateClient']
 
@@ -59,6 +61,8 @@ class GateClient:
         self._leverage_cache: dict[str, int] = {}
         self._update_task = None
         self._shutdown = asyncio.Event()
+
+        logger.info('Gate client initializated succesfully.')
 
 
     async def __aenter__(self):
