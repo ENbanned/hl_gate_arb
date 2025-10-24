@@ -1,3 +1,5 @@
+import asyncio
+
 from .spread import SpreadFinder
 from .models import BotMode
 from ..exchanges.common import ExchangeClient
@@ -41,12 +43,25 @@ class Bot:
 
 
     async def _prepare_leverages(self):
-        symbols_info = {}
-
+        leverages = {}
+        
+        print('Получаю информацию о символах')
         for symbol in self.symbols:
-            gate_symbol_info = self.gate.get_symbol_info(symbol)
-            hyperliquid_symbol_info = self.hyperliquid.get_symbol_info(symbol)
+            gate_info = self.gate.get_symbol_info(symbol)
+            hl_info = self.hyperliquid.get_symbol_info(symbol)
+            
+            min_leverage = min(gate_info.max_leverage, hl_info.max_leverage)
+            leverages[symbol] = min_leverage
+        
+        if not leverages:
+            return
+        
 
-            symbols_info['gate'] = ...
+        await asyncio.gather(
+            self.gate.set_leverages(leverages),
+            self.hyperliquid.set_leverages(leverages)
+        )
+        
+        print(f"[BOT] Set leverage for {len(leverages)} symbols")
 
         
