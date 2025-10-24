@@ -121,7 +121,6 @@ class HyperliquidClient:
                 symbol,
                 False
             )
-            print(symbol, 2)
             self._leverage_cache[symbol] = leverage
         except Exception as ex:
             raise OrderError(f"Failed to set leverage for {symbol}: {str(ex)}") from ex

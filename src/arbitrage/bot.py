@@ -65,4 +65,5 @@ class Bot:
         
         logger.info(f"[BOT] Set leverage for {len(leverages)} symbols")
 
+
         
