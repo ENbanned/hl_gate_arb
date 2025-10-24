@@ -35,6 +35,9 @@ class Bot:
         await self.gate.orderbook_monitor.start(gate_contracts)
         await self.hyperliquid.price_monitor.start()
         await self.hyperliquid.orderbook_monitor.start(self.symbols)
+
+        self.gate_balance = await self.gate.get_balance()
+        self.hyperliquid_balance = await self.hyperliquid.get_balance()
         
         logger.info(f"[BOT] Ready")
         return self
