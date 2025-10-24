@@ -28,7 +28,7 @@ class NetSpread(BaseModel):
 
 class MinSpread(BaseModel):
     percentage: float
-    usd_size_per_pos: 
+    usd_size_per_pos: float
 
 
 class AnyProfit(BaseModel):
