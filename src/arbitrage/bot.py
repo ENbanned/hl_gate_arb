@@ -41,5 +41,12 @@ class Bot:
 
 
     async def _prepare_leverages(self):
-        print(self.gate.get_symbol_info('0G'))
-        print(self.hyperliquid.get_symbol_info('0G'))
+        symbols_info = {}
+
+        for symbol in self.symbols:
+            gate_symbol_info = self.gate.get_symbol_info(symbol)
+            hyperliquid_symbol_info = self.hyperliquid.get_symbol_info(symbol)
+
+            symbols_info['gate'] = ...
+
+        
