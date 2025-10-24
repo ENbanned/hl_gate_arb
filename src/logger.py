@@ -58,4 +58,4 @@ def setup():
   return logger
 
 
-log = setup()
+logger = setup()

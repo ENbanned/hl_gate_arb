@@ -7,6 +7,7 @@ from src.exchanges.hyperliquid import HyperliquidClient
 from src.arbitrage.spread import SpreadFinder
 from src.arbitrage.models import BotMode, MinSpread, AnyProfit
 from src.arbitrage.bot import Bot
+from src.logger import logger
 
 from src.settings import GATE_API_KEY, GATE_API_SECRET, HYPERLIQUID_ACCOUNT_ADDRESS, HYPERLIQUID_SECRET_KEY
 
@@ -19,7 +20,8 @@ async def main():
             gate: ExchangeClient = gate_client
             hyperliquid: ExchangeClient = hyperliquid_client
 
-            print(gate.get_symbol_info('0G'))
+            info = gate.get_symbol_info('0G')
+            logger.info(info)
             print(hyperliquid.get_symbol_info('0G'))
             return
 
