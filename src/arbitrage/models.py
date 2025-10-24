@@ -34,5 +34,5 @@ class AnyProfit(BaseModel):
     pass
 
 
-type BotMode = MinSpread | AnyProfit
+type BotMode = MinSpread | AnyProfit 
 
