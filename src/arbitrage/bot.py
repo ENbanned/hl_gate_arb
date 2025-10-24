@@ -38,3 +38,7 @@ class Bot:
     
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         pass
+
+
+    async def _get(self):
+        print(self.symbols)

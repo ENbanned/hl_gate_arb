@@ -5,6 +5,7 @@ from src.exchanges.common.models import PositionSide
 from src.exchanges.gate import GateClient
 from src.exchanges.hyperliquid import HyperliquidClient
 from src.arbitrage.spread import SpreadFinder
+from src.arbitrage.bot import Bot
 
 from src.settings import GATE_API_KEY, GATE_API_SECRET, HYPERLIQUID_ACCOUNT_ADDRESS, HYPERLIQUID_SECRET_KEY
 
@@ -16,6 +17,7 @@ async def main():
 
             gate: ExchangeClient = gate_client
             hyperliquid: ExchangeClient = hyperliquid_client
+            bot = Ar
             
             common = gate.get_available_symbols() & hyperliquid.get_available_symbols()
             symbols = sorted(common)
