@@ -164,9 +164,13 @@ class GateClient:
             raise OrderError(f"Failed to set leverage for {symbol}: {ex.message}") from ex
 
 
-    async def set_leverages(self, leverages: dict[str, int]) -> None:
-        tasks = [self.set_leverage(symbol, lev) for symbol, lev in leverages.items()]
-        await asyncio.gather(*tasks)
+    async def set_leverages(self, leverages: dict[str, int], batch_size: int = 10) -> None:
+        items = list(leverages.items())
+        
+        for i in range(0, len(items), batch_size):
+            batch = items[i:i + batch_size]
+            tasks = [self.set_leverage(symbol, lev) for symbol, lev in batch]
+            await asyncio.gather(*tasks)
 
 
     def get_symbol_info(self, symbol: str) -> SymbolInfo | None:

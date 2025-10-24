@@ -47,7 +47,6 @@ class Bot:
     async def _prepare_leverages(self):
         leverages = {}
         
-        print('Получаю информацию о символах')
         for symbol in self.symbols:
             gate_info = self.gate.get_symbol_info(symbol)
             hl_info = self.hyperliquid.get_symbol_info(symbol)
@@ -64,6 +63,6 @@ class Bot:
             self.hyperliquid.set_leverages(leverages)
         )
         
-        print(f"[BOT] Set leverage for {len(leverages)} symbols")
+        logger.info(f"[BOT] Set leverage for {len(leverages)} symbols")
 
         
