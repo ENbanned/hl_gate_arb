@@ -26,7 +26,7 @@ class PositionManager:
     """Управляет открытием, закрытием и мониторингом арбитражных позиций"""
     __slots__ = (
         'gate', 'hyperliquid', 'positions', '_monitor_task',
-        '_running', '_on_position_closed', '_check_event'
+        '_running', '_on_position_closed', '_check_event', '_symbols_in_position'
     )
 
     def __init__(
@@ -42,6 +42,13 @@ class PositionManager:
         self._running = False
         self._on_position_closed = on_position_closed
         self._check_event = asyncio.Event()
+        # Множество символов с открытыми позициями (для быстрой проверки)
+        self._symbols_in_position: set[str] = set()
+
+
+    def has_position(self, symbol: str) -> bool:
+        """Проверяет, есть ли открытая позиция по символу"""
+        return symbol in self._symbols_in_position
 
 
     async def open_position(
@@ -149,6 +156,7 @@ class PositionManager:
             )
 
             self.positions[position_id] = position
+            self._symbols_in_position.add(symbol)  # Добавляем символ в множество
 
             logger.info(
                 f"[POS OPEN] Success {symbol} | ID: {position_id[:8]} | "
@@ -209,6 +217,7 @@ class PositionManager:
 
             # Удаляем позицию из списка
             del self.positions[position_id]
+            self._symbols_in_position.discard(position.symbol)  # Удаляем символ из множества
 
             if isinstance(gate_result, Exception) or isinstance(hl_result, Exception):
                 return None

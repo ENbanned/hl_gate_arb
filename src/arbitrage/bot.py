@@ -215,6 +215,10 @@ class Bot:
 
         # Семафор: только 1 позиция открывается одновременно
         async with self._position_semaphore:
+            # Проверяем, нет ли уже открытой позиции по этому символу
+            if self.position_manager.has_position(symbol):
+                return
+
             # Повторная проверка баланса внутри критической секции
             if not self._check_balance_available(mode.usd_size_per_pos):
                 return
@@ -243,11 +247,17 @@ class Bot:
                 mode=mode
             )
 
-            # Обновляем локальные балансы ВСЕГДА, даже если позиция не открылась
-            size_dec = Decimal(str(mode.usd_size_per_pos))
+            # Обновляем локальные балансы используя РЕАЛЬНЫЙ размер позиции
             if position:
-                # Позиция открыта - резервируем баланс
-                self._update_local_balances(-size_dec, -size_dec)
+                # Вычисляем реальный размер в USD
+                gate_size_usd = float(position.gate_order.size) * float(position.gate_order.fill_price)
+                hl_size_usd = float(position.hl_order.size) * float(position.hl_order.fill_price)
+
+                # Вычитаем реальный размер + комиссии
+                gate_total = Decimal(str(gate_size_usd)) + position.gate_order.fee
+                hl_total = Decimal(str(hl_size_usd)) + position.hl_order.fee
+
+                self._update_local_balances(-gate_total, -hl_total)
             else:
                 # Позиция не открылась - обновляем с бирж для точности
                 await self._refresh_balances()
