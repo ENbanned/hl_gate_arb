@@ -20,11 +20,23 @@ async def main():
             gate: ExchangeClient = gate_client
             hyperliquid: ExchangeClient = hyperliquid_client
 
-            async with Bot(MinSpread(percentage=1, usd_size_per_pos=300), gate, hyperliquid) as bot:
-                await asyncio.sleep(6)
-            
-                result = await bot._prepare_leverages()
-                print(result)
+            # Конфигурация режима MinSpread:
+            # - percentage: минимальный спред для открытия (1%)
+            # - usd_size_per_pos: размер позиции в USDT ($300)
+            # - target_spread_pct: целевой спред для закрытия с профитом (0.2%)
+            # - stop_loss_pct: расширение спреда для стоп-лосса (0.3%)
+            # - timeout_minutes: таймаут для закрытия если спред не сошелся (10 минут)
+            mode = MinSpread(
+                percentage=1.0,
+                usd_size_per_pos=300.0,
+                target_spread_pct=0.2,
+                stop_loss_pct=0.3,
+                timeout_minutes=10.0
+            )
+
+            async with Bot(mode, gate, hyperliquid) as bot:
+                # Запускаем основной цикл бота
+                await bot.run()
         
 
 asyncio.run(main())
