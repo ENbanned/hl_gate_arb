@@ -214,6 +214,7 @@ class GateOrderbookMonitor:
                             'payload': [contract, '100ms', '50']
                         })
                         await ws.send(subscribe_msg)
+                        await asyncio.sleep(0.1)
 
                     async for message in ws:
                         if self._shutdown.is_set():
