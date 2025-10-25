@@ -4,11 +4,20 @@ from typing import Any
 from ..common.models import Balance, Order, OrderStatus, Position, PositionSide, SymbolInfo, FundingRate, Orderbook, Volume24h, PositionSide, OrderbookLevel
 
 
-def adapt_position(raw: dict[str, Any]) -> Position | None:
-    size = raw.get('size', 0)
-    if size == 0:
+def adapt_position(raw: dict[str, Any], quanto_multiplier: float = 1.0) -> Position | None:
+    """Адаптирует позицию Gate.io
+
+    Args:
+        raw: Сырой ответ API Gate
+        quanto_multiplier: Множитель контракта (1 контракт = N монет)
+    """
+    size_contracts = raw.get('size', 0)
+    if size_contracts == 0:
         return None
-    
+
+    # Конвертируем размер из контрактов в монеты
+    size_coins = abs(size_contracts) * quanto_multiplier
+
     margin_used = Decimal(raw.get('initial_margin', '0'))
     if margin_used == 0:
         value = Decimal(raw.get('value', '0'))
@@ -17,19 +26,19 @@ def adapt_position(raw: dict[str, Any]) -> Position | None:
             leverage_val = Decimal(leverage_str)
         if leverage_val > 0:
             margin_used = value / leverage_val
-    
+
     leverage_str = raw.get('leverage', '0')
     leverage = int(leverage_str) if leverage_str and leverage_str != '0' else None
-    
+
     liq_price_str = raw.get('liq_price', '0')
     liq_price = None
     if liq_price_str and liq_price_str != '0':
         liq_price = Decimal(liq_price_str)
-    
+
     return Position(
         coin=raw['contract'].replace('_USDT', ''),
-        size=Decimal(str(abs(size))),
-        side=PositionSide.LONG if size > 0 else PositionSide.SHORT,
+        size=Decimal(str(size_coins)),  # Размер в монетах
+        side=PositionSide.LONG if size_contracts > 0 else PositionSide.SHORT,
         entry_price=Decimal(raw.get('entry_price', '0')),
         mark_price=Decimal(raw.get('mark_price', '0')),
         unrealized_pnl=Decimal(raw.get('unrealised_pnl', '0')),
@@ -39,23 +48,30 @@ def adapt_position(raw: dict[str, Any]) -> Position | None:
     )
 
 
-def adapt_order(raw: dict[str, Any]) -> Order:
-    size = raw['size']
-    
+def adapt_order(raw: dict[str, Any], quanto_multiplier: float = 1.0) -> Order:
+    """Адаптирует ордер Gate.io
+
+    Args:
+        raw: Сырой ответ API Gate
+        quanto_multiplier: Множитель контракта (1 контракт = N монет)
+    """
+    size_contracts = raw['size']  # Размер в контрактах
+    size_coins = abs(size_contracts) * quanto_multiplier  # Конвертируем в монеты
+
     fee_rate = Decimal(raw.get('tkfr', '0'))
     fill_price = Decimal(raw['fill_price'])
-    fee = abs(Decimal(str(size)) * fill_price * fee_rate)
-    
+    fee = Decimal(str(size_coins)) * fill_price * fee_rate
+
     status_map = {
         'finished': OrderStatus.FILLED,
         'open': OrderStatus.PARTIAL,
     }
-    
+
     return Order(
         order_id=str(raw['id']),
         coin=raw['contract'].replace('_USDT', ''),
-        size=Decimal(str(abs(size))),
-        side=PositionSide.LONG if size > 0 else PositionSide.SHORT,
+        size=Decimal(str(size_coins)),  # Размер в монетах, не контрактах
+        side=PositionSide.LONG if size_contracts > 0 else PositionSide.SHORT,
         fill_price=fill_price,
         status=status_map.get(raw.get('status', 'finished'), OrderStatus.FILLED),
         fee=fee,

@@ -187,42 +187,58 @@ class GateClient:
 
     async def buy_market(self, symbol: str, size: float) -> Order:
         contract = self._symbol_to_contract(symbol)
-        
+
+        # Gate.io futures size в контрактах, нужно делить на quanto_multiplier
+        contract_info = self.contracts_meta.get(contract, {})
+        quanto = contract_info.get('quanto_multiplier', '1')
+        quanto_mult = float(quanto) if quanto else 1.0
+
+        # Конвертируем размер в монетах в количество контрактов
+        contracts_size = int(size / quanto_mult)
+
         order = FuturesOrder(
         contract=contract,
-        size=int(size),
+        size=contracts_size,
         price='0',
         tif='ioc'
         )
-        
+
         try:
             raw = await asyncio.to_thread(
                 self.futures_api.create_futures_order,
                 self.settle,
                 order
             )
-            return adapt_order(raw.to_dict())
+            return adapt_order(raw.to_dict(), quanto_mult)
         except GateApiException as ex:
             raise OrderError(f"Failed to buy market: {ex.message}") from ex
 
 
     async def sell_market(self, symbol: str, size: float) -> Order:
         contract = self._symbol_to_contract(symbol)
-        
+
+        # Gate.io futures size в контрактах, нужно делить на quanto_multiplier
+        contract_info = self.contracts_meta.get(contract, {})
+        quanto = contract_info.get('quanto_multiplier', '1')
+        quanto_mult = float(quanto) if quanto else 1.0
+
+        # Конвертируем размер в монетах в количество контрактов
+        contracts_size = -abs(int(size / quanto_mult))
+
         order = FuturesOrder(
         contract=contract,
-        size=-abs(int(size)),
+        size=contracts_size,
         price='0',
         tif='ioc'
         )
-        
+
         try:
             raw = await asyncio.to_thread(
                 self.futures_api.create_futures_order,
                 self.settle,
                 order
             )
-            return adapt_order(raw.to_dict())
+            return adapt_order(raw.to_dict(), quanto_mult)
         except GateApiException as ex:
             raise OrderError(f"Failed to sell market: {ex.message}") from ex
 
@@ -233,13 +249,21 @@ class GateClient:
                 self.futures_api.list_positions,
                 self.settle
             )
-            
+
             positions = []
             for raw in raw_positions:
-                pos = adapt_position(raw.to_dict())
+                raw_dict = raw.to_dict()
+                contract = raw_dict.get('contract', '')
+
+                # Получаем quanto_multiplier для контракта
+                contract_info = self.contracts_meta.get(contract, {})
+                quanto = contract_info.get('quanto_multiplier', '1')
+                quanto_mult = float(quanto) if quanto else 1.0
+
+                pos = adapt_position(raw_dict, quanto_mult)
                 if pos:
                     positions.append(pos)
-            
+
             return positions
         except GateApiException as ex:
             raise OrderError(f"Failed to get positions: {ex.message}") from ex

@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 class SpreadDirection(str, Enum):
     GATE_SHORT = 'gate_short'
-    HL_SHORT = 'hl_long'
+    HL_SHORT = 'hl_short'  # Исправлено: было 'hl_long'
 
 
 class RawSpread(BaseModel):
