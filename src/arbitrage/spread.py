@@ -54,11 +54,37 @@ class SpreadFinder:
     async def calculate_net_spread(
         self,
         symbol: str,
-        size: float
+        size_usd: float
     ) -> NetSpread:
-        """Вычисляет точный спред с учетом комиссий и ликвидности"""
-        # Параллельный запрос цен с учетом ликвидности
-        gate_buy, gate_sell, hl_buy, hl_sell = await self._estimate_all_prices(symbol, size)
+        """Вычисляет точный спред с учетом комиссий и ликвидности
+
+        Args:
+            symbol: Символ торговой пары
+            size_usd: Размер позиции в USD
+        """
+        # Получаем текущие цены для конвертации USD в количество монет
+        gate_price = self.gate.price_monitor.get_price(symbol)
+        hl_price = self.hyperliquid.price_monitor.get_price(symbol)
+
+        if not gate_price or not hl_price:
+            # Возвращаем нулевой спред если нет цен
+            return NetSpread(
+                symbol=symbol,
+                size=size_usd,
+                gate_short_pct=Decimal('0'),
+                hl_short_pct=Decimal('0'),
+                profit_usd_gate_short=Decimal('0'),
+                profit_usd_hl_short=Decimal('0'),
+                best_direction=SpreadDirection.GATE_SHORT,
+                best_usd_profit=Decimal('0')
+            )
+
+        # Конвертируем USD в количество монет
+        avg_price = (float(gate_price) + float(hl_price)) / 2
+        size_coins = size_usd / avg_price
+
+        # Параллельный запрос цен с учетом ликвидности (передаем размер в монетах)
+        gate_buy, gate_sell, hl_buy, hl_sell = await self._estimate_all_prices(symbol, size_coins)
 
         # Применяем комиссии
         gate_buy_fee = gate_buy * (self._one + self.gate_fee)
@@ -66,7 +92,7 @@ class SpreadFinder:
         hl_buy_fee = hl_buy * (self._one + self.hl_fee)
         hl_sell_fee = hl_sell * (self._one - self.hl_fee)
 
-        size_dec = Decimal(str(size))
+        size_dec = Decimal(str(size_coins))
 
         # Gate SHORT, HL LONG
         revenue_gate_short = gate_sell_fee * size_dec
@@ -90,7 +116,7 @@ class SpreadFinder:
 
         return NetSpread(
             symbol=symbol,
-            size=size,
+            size=size_usd,
             gate_short_pct=spread_gate_short,
             hl_short_pct=spread_hl_short,
             profit_usd_gate_short=profit_gate_short,

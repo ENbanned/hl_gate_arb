@@ -13,7 +13,7 @@ class Bot:
     __slots__ = (
         'mode', 'gate', 'hyperliquid', 'finder', 'position_manager',
         'symbols', 'gate_balance', 'hyperliquid_balance', '_running',
-        '_volume_cache', '_volume_update_task'
+        '_volume_cache', '_volume_update_task', '_position_semaphore'
     )
 
     def __init__(
@@ -40,6 +40,9 @@ class Bot:
         # Кэш 24h объемов для фильтрации
         self._volume_cache: dict[str, float] = {}
         self._volume_update_task: asyncio.Task | None = None
+
+        # Семафор для открытия только 1 позиции одновременно
+        self._position_semaphore = asyncio.Semaphore(1)
 
 
     async def __aenter__(self):
@@ -210,38 +213,44 @@ class Bot:
         if not raw_spread or float(raw_spread.spread_pct) < mode.percentage:
             return
 
-        # Проверка баланса
-        if not self._check_balance_available(mode.usd_size_per_pos):
-            return
+        # Семафор: только 1 позиция открывается одновременно
+        async with self._position_semaphore:
+            # Повторная проверка баланса внутри критической секции
+            if not self._check_balance_available(mode.usd_size_per_pos):
+                return
 
-        # Вычисляем точный net spread
-        net_spread = await self.finder.calculate_net_spread(symbol, mode.usd_size_per_pos)
+            # Вычисляем точный net spread
+            net_spread = await self.finder.calculate_net_spread(symbol, mode.usd_size_per_pos)
 
-        # Определяем лучшее направление и проверяем порог
-        spread_pct = (float(net_spread.gate_short_pct) if net_spread.best_direction == SpreadDirection.GATE_SHORT
-                      else float(net_spread.hl_short_pct))
+            # Определяем лучшее направление и проверяем порог
+            spread_pct = (float(net_spread.gate_short_pct) if net_spread.best_direction == SpreadDirection.GATE_SHORT
+                          else float(net_spread.hl_short_pct))
 
-        if spread_pct < mode.percentage:
-            return
+            if spread_pct < mode.percentage:
+                return
 
-        logger.info(
-            f"[BOT] {symbol} | Dir: {net_spread.best_direction.value} | "
-            f"Spread: {spread_pct:.4f}% | Profit: ${net_spread.best_usd_profit}"
-        )
+            logger.info(
+                f"[BOT] {symbol} | Dir: {net_spread.best_direction.value} | "
+                f"Spread: {spread_pct:.4f}% | Profit: ${net_spread.best_usd_profit}"
+            )
 
-        # Открываем позицию
-        position = await self.position_manager.open_position(
-            symbol=symbol,
-            direction=net_spread.best_direction,
-            size_usdt=mode.usd_size_per_pos,
-            entry_spread_pct=spread_pct,
-            mode=mode
-        )
+            # Открываем позицию
+            position = await self.position_manager.open_position(
+                symbol=symbol,
+                direction=net_spread.best_direction,
+                size_usdt=mode.usd_size_per_pos,
+                entry_spread_pct=spread_pct,
+                mode=mode
+            )
 
-        if position:
-            # Обновляем локальные балансы
+            # Обновляем локальные балансы ВСЕГДА, даже если позиция не открылась
             size_dec = Decimal(str(mode.usd_size_per_pos))
-            self._update_local_balances(-size_dec, -size_dec)
+            if position:
+                # Позиция открыта - резервируем баланс
+                self._update_local_balances(-size_dec, -size_dec)
+            else:
+                # Позиция не открылась - обновляем с бирж для точности
+                await self._refresh_balances()
 
 
     async def run(self):

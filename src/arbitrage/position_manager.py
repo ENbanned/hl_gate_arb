@@ -65,13 +65,25 @@ class PositionManager:
         )
 
         try:
-            # Открываем позиции параллельно
+            # Получаем текущие цены для конвертации USD в количество монет
+            gate_price = self.gate.price_monitor.get_price(symbol)
+            hl_price = self.hyperliquid.price_monitor.get_price(symbol)
+
+            if not gate_price or not hl_price:
+                logger.error(f"[POS OPEN] No price data for {symbol}")
+                return None
+
+            # Конвертируем USD в количество монет (используем среднюю цену)
+            avg_price = (float(gate_price) + float(hl_price)) / 2
+            size_coins = size_usdt / avg_price
+
+            # Открываем позиции параллельно (передаем размер в монетах)
             if direction == SpreadDirection.GATE_SHORT:
-                gate_task = self.gate.sell_market(symbol, size_usdt)
-                hl_task = self.hyperliquid.buy_market(symbol, size_usdt)
+                gate_task = self.gate.sell_market(symbol, size_coins)
+                hl_task = self.hyperliquid.buy_market(symbol, size_coins)
             else:
-                gate_task = self.gate.buy_market(symbol, size_usdt)
-                hl_task = self.hyperliquid.sell_market(symbol, size_usdt)
+                gate_task = self.gate.buy_market(symbol, size_coins)
+                hl_task = self.hyperliquid.sell_market(symbol, size_coins)
 
             results = await asyncio.gather(gate_task, hl_task, return_exceptions=True)
             gate_result, hl_result = results
@@ -149,6 +161,7 @@ class PositionManager:
 
         try:
             # Закрываем позиции параллельно (обратные операции)
+            # order.size уже в монетах, можно передавать напрямую
             if position.direction == SpreadDirection.GATE_SHORT:
                 gate_size = float(position.gate_order.size)
                 hl_size = float(position.hl_order.size)
