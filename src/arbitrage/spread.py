@@ -83,8 +83,31 @@ class SpreadFinder:
         avg_price = (float(gate_price) + float(hl_price)) / 2
         size_coins = size_usd / avg_price
 
-        # Параллельный запрос цен с учетом ликвидности (передаем размер в монетах)
-        gate_buy, gate_sell, hl_buy, hl_sell = await self._estimate_all_prices(symbol, size_coins)
+        # Получаем информацию о символе для правильного округления
+        gate_info = self.gate.get_symbol_info(symbol)
+        hl_info = self.hyperliquid.get_symbol_info(symbol)
+
+        if not gate_info or not hl_info:
+            # Возвращаем нулевой спред если нет symbol info
+            return NetSpread(
+                symbol=symbol,
+                size=size_usd,
+                gate_short_pct=Decimal('0'),
+                hl_short_pct=Decimal('0'),
+                profit_usd_gate_short=Decimal('0'),
+                profit_usd_hl_short=Decimal('0'),
+                best_direction=SpreadDirection.GATE_SHORT,
+                best_usd_profit=Decimal('0')
+            )
+
+        # Округляем размер согласно требованиям бирж
+        gate_size = int(size_coins)  # Gate требует целые числа
+        hl_size = round(size_coins, hl_info.sz_decimals)  # HL требует sz_decimals
+
+        # Параллельный запрос цен с учетом ликвидности (передаем округленные размеры)
+        gate_buy, gate_sell, hl_buy, hl_sell = await self._estimate_all_prices(
+            symbol, gate_size, hl_size
+        )
 
         # Применяем комиссии
         gate_buy_fee = gate_buy * (self._one + self.gate_fee)
@@ -92,17 +115,18 @@ class SpreadFinder:
         hl_buy_fee = hl_buy * (self._one + self.hl_fee)
         hl_sell_fee = hl_sell * (self._one - self.hl_fee)
 
-        size_dec = Decimal(str(size_coins))
+        gate_size_dec = Decimal(str(gate_size))
+        hl_size_dec = Decimal(str(hl_size))
 
         # Gate SHORT, HL LONG
-        revenue_gate_short = gate_sell_fee * size_dec
-        cost_gate_short = hl_buy_fee * size_dec
+        revenue_gate_short = gate_sell_fee * gate_size_dec
+        cost_gate_short = hl_buy_fee * hl_size_dec
         profit_gate_short = revenue_gate_short - cost_gate_short
         spread_gate_short = profit_gate_short / cost_gate_short * self._hundred
 
         # HL SHORT, Gate LONG
-        revenue_hl_short = hl_sell_fee * size_dec
-        cost_hl_short = gate_buy_fee * size_dec
+        revenue_hl_short = hl_sell_fee * hl_size_dec
+        cost_hl_short = gate_buy_fee * gate_size_dec
         profit_hl_short = revenue_hl_short - cost_hl_short
         spread_hl_short = profit_hl_short / cost_hl_short * self._hundred
 
@@ -126,15 +150,23 @@ class SpreadFinder:
         )
 
 
-    async def _estimate_all_prices(self, symbol: str, size: float) -> tuple[Decimal, Decimal, Decimal, Decimal]:
-        """Параллельно оценивает все 4 цены для ускорения"""
+    async def _estimate_all_prices(
+        self, symbol: str, gate_size: float, hl_size: float
+    ) -> tuple[Decimal, Decimal, Decimal, Decimal]:
+        """Параллельно оценивает все 4 цены для ускорения
+
+        Args:
+            symbol: Символ торговой пары
+            gate_size: Размер для Gate (целое число)
+            hl_size: Размер для Hyperliquid (округленное до sz_decimals)
+        """
         import asyncio
 
         tasks = [
-            self.gate.estimate_fill_price(symbol, size, PositionSide.LONG),
-            self.gate.estimate_fill_price(symbol, size, PositionSide.SHORT),
-            self.hyperliquid.estimate_fill_price(symbol, size, PositionSide.LONG),
-            self.hyperliquid.estimate_fill_price(symbol, size, PositionSide.SHORT)
+            self.gate.estimate_fill_price(symbol, gate_size, PositionSide.LONG),
+            self.gate.estimate_fill_price(symbol, gate_size, PositionSide.SHORT),
+            self.hyperliquid.estimate_fill_price(symbol, hl_size, PositionSide.LONG),
+            self.hyperliquid.estimate_fill_price(symbol, hl_size, PositionSide.SHORT)
         ]
 
         return await asyncio.gather(*tasks)

@@ -77,13 +77,27 @@ class PositionManager:
             avg_price = (float(gate_price) + float(hl_price)) / 2
             size_coins = size_usdt / avg_price
 
-            # Открываем позиции параллельно (передаем размер в монетах)
+            # Получаем информацию о символе для правильного округления
+            gate_info = self.gate.get_symbol_info(symbol)
+            hl_info = self.hyperliquid.get_symbol_info(symbol)
+
+            if not gate_info or not hl_info:
+                logger.error(f"[POS OPEN] No symbol info for {symbol}")
+                return None
+
+            # Округляем размер согласно требованиям каждой биржи
+            # Gate требует целые числа (sz_decimals = 0)
+            gate_size = int(size_coins)
+            # Hyperliquid требует округление до sz_decimals
+            hl_size = round(size_coins, hl_info.sz_decimals)
+
+            # Открываем позиции параллельно (передаем округленные размеры)
             if direction == SpreadDirection.GATE_SHORT:
-                gate_task = self.gate.sell_market(symbol, size_coins)
-                hl_task = self.hyperliquid.buy_market(symbol, size_coins)
+                gate_task = self.gate.sell_market(symbol, gate_size)
+                hl_task = self.hyperliquid.buy_market(symbol, hl_size)
             else:
-                gate_task = self.gate.buy_market(symbol, size_coins)
-                hl_task = self.hyperliquid.sell_market(symbol, size_coins)
+                gate_task = self.gate.buy_market(symbol, gate_size)
+                hl_task = self.hyperliquid.sell_market(symbol, hl_size)
 
             results = await asyncio.gather(gate_task, hl_task, return_exceptions=True)
             gate_result, hl_result = results
@@ -99,7 +113,7 @@ class PositionManager:
                 gate_order = gate_result
                 logger.info(
                     f"[POS OPEN] Gate filled | Price: {gate_order.fill_price} | "
-                    f"Size: {gate_order.size} | Fee: {gate_order.fee}"
+                    f"Size: {gate_order.size} (requested: {gate_size}) | Fee: {gate_order.fee}"
                 )
 
             if isinstance(hl_result, Exception):
@@ -109,7 +123,7 @@ class PositionManager:
                 hl_order = hl_result
                 logger.info(
                     f"[POS OPEN] HL filled | Price: {hl_order.fill_price} | "
-                    f"Size: {hl_order.size} | Fee: {hl_order.fee}"
+                    f"Size: {hl_order.size} (requested: {hl_size}) | Fee: {hl_order.fee}"
                 )
 
             # Если одна позиция не открылась - закрываем другую
