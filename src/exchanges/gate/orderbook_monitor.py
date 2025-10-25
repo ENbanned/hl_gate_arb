@@ -205,6 +205,7 @@ class GateOrderbookMonitor:
         while not self._shutdown.is_set():
             try:
                 async with websockets.connect(self.ws_url) as ws:
+                    # Отправляем все подписки без задержки для максимальной скорости
                     for contract in contracts:
                         subscribe_msg = json.dumps({
                             'time': int(time.time()),
@@ -213,8 +214,7 @@ class GateOrderbookMonitor:
                             'payload': [contract, '100ms', '50']
                         })
                         await ws.send(subscribe_msg)
-                        await asyncio.sleep(0.1)
-                                        
+
                     async for message in ws:
                         if self._shutdown.is_set():
                             break

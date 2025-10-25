@@ -36,12 +36,14 @@ class MinSpread(BaseModel):
     target_spread_pct: целевой спред в % для закрытия с профитом (тейк-профит)
     stop_loss_pct: расширение спреда в % для стоп-лосса
     timeout_minutes: таймаут в минутах, если спред не сошелся
+    min_24h_volume_usd: минимальный 24h объем в USDT для фильтрации токенов (0 = без фильтрации)
     """
     percentage: float
     usd_size_per_pos: float
     target_spread_pct: float
     stop_loss_pct: float
     timeout_minutes: float
+    min_24h_volume_usd: float = 0.0
 
 
 class AnyProfit(BaseModel):

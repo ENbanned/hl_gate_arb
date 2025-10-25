@@ -6,7 +6,8 @@ from ..settings import GATE_TAKER_FEE, HYPERLIQUID_TAKER_FEE
 
 
 class SpreadFinder:
-    __slots__ = ('gate', 'hyperliquid', 'gate_taker_fee', 'hyperliquid_taker_fee')
+    """Вычисляет спреды между биржами"""
+    __slots__ = ('gate', 'hyperliquid', 'gate_fee', 'hl_fee', '_one', '_hundred')
 
     def __init__(
         self,
@@ -17,11 +18,16 @@ class SpreadFinder:
         ):
         self.gate = gate
         self.hyperliquid = hyperliquid
-        self.gate_taker_fee = gate_taker_fee
-        self.hyperliquid_taker_fee = hyperliquid_taker_fee
+        self.gate_fee = gate_taker_fee
+        self.hl_fee = hyperliquid_taker_fee
+
+        # Кэшируем константы для оптимизации
+        self._one = Decimal('1')
+        self._hundred = Decimal('100')
 
 
     def get_raw_spread(self, symbol: str) -> RawSpread | None:
+        """Вычисляет сырой спред без учета комиссий (быстрый метод)"""
         gate_price = self.gate.price_monitor.get_price(symbol)
         hl_price = self.hyperliquid.price_monitor.get_price(symbol)
 
@@ -31,8 +37,9 @@ class SpreadFinder:
         gate_dec = Decimal(str(gate_price))
         hl_dec = Decimal(str(hl_price))
 
+        # Оптимизация: используем среднее значение только для расчета процента
         mid_price = (gate_dec + hl_dec) / Decimal('2')
-        spread_pct = abs(gate_dec - hl_dec) / mid_price * Decimal('100')
+        spread_pct = abs(gate_dec - hl_dec) / mid_price * self._hundred
 
         direction = SpreadDirection.GATE_SHORT if gate_dec > hl_dec else SpreadDirection.HL_SHORT
 
@@ -45,39 +52,42 @@ class SpreadFinder:
 
 
     async def calculate_net_spread(
-        self, 
-        symbol: str, 
+        self,
+        symbol: str,
         size: float
     ) -> NetSpread:
-        gate_buy = await self.gate.estimate_fill_price(symbol, size, PositionSide.LONG)
-        gate_sell = await self.gate.estimate_fill_price(symbol, size, PositionSide.SHORT)
-        hl_buy = await self.hyperliquid.estimate_fill_price(symbol, size, PositionSide.LONG)
-        hl_sell = await self.hyperliquid.estimate_fill_price(symbol, size, PositionSide.SHORT)
-        
-        gate_buy_with_fee = gate_buy * (Decimal('1') + self.gate_taker_fee)
-        gate_sell_with_fee = gate_sell * (Decimal('1') - self.gate_taker_fee)
-        hl_buy_with_fee = hl_buy * (Decimal('1') + self.hyperliquid_taker_fee)
-        hl_sell_with_fee = hl_sell * (Decimal('1') - self.hyperliquid_taker_fee)
-        
+        """Вычисляет точный спред с учетом комиссий и ликвидности"""
+        # Параллельный запрос цен с учетом ликвидности
+        gate_buy, gate_sell, hl_buy, hl_sell = await self._estimate_all_prices(symbol, size)
+
+        # Применяем комиссии
+        gate_buy_fee = gate_buy * (self._one + self.gate_fee)
+        gate_sell_fee = gate_sell * (self._one - self.gate_fee)
+        hl_buy_fee = hl_buy * (self._one + self.hl_fee)
+        hl_sell_fee = hl_sell * (self._one - self.hl_fee)
+
         size_dec = Decimal(str(size))
-        
-        revenue_gate_short = gate_sell_with_fee * size_dec
-        cost_gate_short = hl_buy_with_fee * size_dec
+
+        # Gate SHORT, HL LONG
+        revenue_gate_short = gate_sell_fee * size_dec
+        cost_gate_short = hl_buy_fee * size_dec
         profit_gate_short = revenue_gate_short - cost_gate_short
-        spread_gate_short = profit_gate_short / cost_gate_short * Decimal('100')
-        
-        revenue_hl_short = hl_sell_with_fee * size_dec
-        cost_hl_short = gate_buy_with_fee * size_dec
+        spread_gate_short = profit_gate_short / cost_gate_short * self._hundred
+
+        # HL SHORT, Gate LONG
+        revenue_hl_short = hl_sell_fee * size_dec
+        cost_hl_short = gate_buy_fee * size_dec
         profit_hl_short = revenue_hl_short - cost_hl_short
-        spread_hl_short = profit_hl_short / cost_hl_short * Decimal('100')
-        
+        spread_hl_short = profit_hl_short / cost_hl_short * self._hundred
+
+        # Определяем лучшее направление
         if profit_gate_short > profit_hl_short:
             best_direction = SpreadDirection.GATE_SHORT
             best_profit = profit_gate_short
         else:
             best_direction = SpreadDirection.HL_SHORT
             best_profit = profit_hl_short
-        
+
         return NetSpread(
             symbol=symbol,
             size=size,
@@ -88,3 +98,17 @@ class SpreadFinder:
             best_direction=best_direction,
             best_usd_profit=best_profit
         )
+
+
+    async def _estimate_all_prices(self, symbol: str, size: float) -> tuple[Decimal, Decimal, Decimal, Decimal]:
+        """Параллельно оценивает все 4 цены для ускорения"""
+        import asyncio
+
+        tasks = [
+            self.gate.estimate_fill_price(symbol, size, PositionSide.LONG),
+            self.gate.estimate_fill_price(symbol, size, PositionSide.SHORT),
+            self.hyperliquid.estimate_fill_price(symbol, size, PositionSide.LONG),
+            self.hyperliquid.estimate_fill_price(symbol, size, PositionSide.SHORT)
+        ]
+
+        return await asyncio.gather(*tasks)
