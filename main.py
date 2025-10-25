@@ -28,7 +28,7 @@ async def main():
             # - timeout_minutes: таймаут для закрытия если спред не сошелся (10 минут)
             # - min_24h_volume_usd: минимальный 24h объем для фильтрации токенов (1M USDT, 0 = без фильтрации)
             mode = MinSpread(
-                percentage=1.0,
+                percentage=0.5,
                 usd_size_per_pos=300.0,
                 target_spread_pct=0.2,
                 stop_loss_pct=0.3,
