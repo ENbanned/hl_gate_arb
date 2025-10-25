@@ -32,14 +32,16 @@ class MinSpread(BaseModel):
     Mode для арбитража с минимальным порогом спреда
 
     percentage: минимальный спред в % для открытия позиции
-    usd_size_per_pos: размер позиции в USDT
+    margin_per_pos: размер МАРЖИ в USDT на позицию (не размер позиции!)
     target_spread_pct: целевой спред в % для закрытия с профитом (тейк-профит)
     stop_loss_pct: расширение спреда в % для стоп-лосса
     timeout_minutes: таймаут в минутах, если спред не сошелся
     min_24h_volume_usd: минимальный 24h объем в USDT для фильтрации токенов (0 = без фильтрации)
+
+    Размер позиции рассчитывается автоматически: position_size = margin_per_pos × leverage
     """
     percentage: float
-    usd_size_per_pos: float
+    margin_per_pos: float  # Изменено с usd_size_per_pos - теперь это маржа
     target_spread_pct: float
     stop_loss_pct: float
     timeout_minutes: float

@@ -194,14 +194,14 @@ class Bot:
         await self._refresh_balances()
 
 
-    def _check_balance_available(self, size_usdt: float) -> bool:
-        """Проверяет достаточно ли баланса"""
+    def _check_balance_available(self, margin: float) -> bool:
+        """Проверяет достаточно ли баланса для маржи"""
         if not self.gate_balance or not self.hyperliquid_balance:
             return False
 
-        size_dec = Decimal(str(size_usdt))
-        return (self.gate_balance.available >= size_dec and
-                self.hyperliquid_balance.available >= size_dec)
+        margin_dec = Decimal(str(margin))
+        return (self.gate_balance.available >= margin_dec and
+                self.hyperliquid_balance.available >= margin_dec)
 
 
     async def _handle_min_spread_mode(self, symbol: str):
@@ -219,12 +219,25 @@ class Bot:
             if self.position_manager.has_position(symbol):
                 return
 
-            # Повторная проверка баланса внутри критической секции
-            if not self._check_balance_available(mode.usd_size_per_pos):
+            # Проверка баланса для маржи
+            if not self._check_balance_available(mode.margin_per_pos):
                 return
 
-            # Вычисляем точный net spread
-            net_spread = await self.finder.calculate_net_spread(symbol, mode.usd_size_per_pos)
+            # Получаем leverage для символа
+            gate_info = self.gate.get_symbol_info(symbol)
+            hl_info = self.hyperliquid.get_symbol_info(symbol)
+
+            if not gate_info or not hl_info:
+                return
+
+            # Используем минимальное плечо из двух бирж
+            leverage = min(gate_info.max_leverage, hl_info.max_leverage)
+
+            # Рассчитываем размер позиции: position_size = margin × leverage
+            position_size_usd = mode.margin_per_pos * leverage
+
+            # Вычисляем точный net spread (теперь с учетом реального размера позиции)
+            net_spread = await self.finder.calculate_net_spread(symbol, position_size_usd)
 
             # Определяем лучшее направление и проверяем порог
             spread_pct = (float(net_spread.gate_short_pct) if net_spread.best_direction == SpreadDirection.GATE_SHORT
@@ -235,29 +248,29 @@ class Bot:
 
             logger.info(
                 f"[BOT] {symbol} | Dir: {net_spread.best_direction.value} | "
-                f"Spread: {spread_pct:.4f}% | Profit: ${net_spread.best_usd_profit}"
+                f"Leverage: {leverage}x | Margin: ${mode.margin_per_pos:.2f} | "
+                f"Position: ${position_size_usd:.2f} | Spread: {spread_pct:.4f}% | Profit: ${net_spread.best_usd_profit}"
             )
 
             # Открываем позицию
             position = await self.position_manager.open_position(
                 symbol=symbol,
                 direction=net_spread.best_direction,
-                size_usdt=mode.usd_size_per_pos,
+                size_usdt=position_size_usd,
                 entry_spread_pct=spread_pct,
                 mode=mode
             )
 
-            # Обновляем локальные балансы используя РЕАЛЬНЫЙ размер позиции
+            # Обновляем локальные балансы используя РЕАЛЬНУЮ маржу
             if position:
-                # Вычисляем реальный размер в USD
+                # Маржа = реальный размер / leverage + комиссии
                 gate_size_usd = float(position.gate_order.size) * float(position.gate_order.fill_price)
                 hl_size_usd = float(position.hl_order.size) * float(position.hl_order.fill_price)
 
-                # Вычитаем реальный размер + комиссии
-                gate_total = Decimal(str(gate_size_usd)) + position.gate_order.fee
-                hl_total = Decimal(str(hl_size_usd)) + position.hl_order.fee
+                gate_margin = Decimal(str(gate_size_usd / leverage)) + position.gate_order.fee
+                hl_margin = Decimal(str(hl_size_usd / leverage)) + position.hl_order.fee
 
-                self._update_local_balances(-gate_total, -hl_total)
+                self._update_local_balances(-gate_margin, -hl_margin)
             else:
                 # Позиция не открылась - обновляем с бирж для точности
                 await self._refresh_balances()
